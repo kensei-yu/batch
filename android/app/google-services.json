@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "286850527500",
+    "project_id": "batch-9bf18",
+    "storage_bucket": "batch-9bf18.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:286850527500:android:3ac48cc17bf07cf7c9d929",
+        "android_client_info": {
+          "package_name": "com.kensei.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCJZtrTOu9qu_34hoUOOz7CyOMzWdN4_do"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
