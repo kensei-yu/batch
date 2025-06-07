@@ -1,7 +1,10 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart'; // Firebase設定ファイルをインポート
-import 'screens/welcome_screen.dart'; // WelcomeScreenをインポート
+import 'package:flutter_localizations/flutter_localizations.dart'; // この行をインポート
+import 'firebase_options.dart'; 
+import 'screens/welcome_screen.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,11 +20,21 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ログイン・新規登録', // アプリのタイトル
+      title: 'ログイン・新規登録',
       theme: ThemeData(
-        primarySwatch: Colors.blue, // アプリのテーマカラー
+        primarySwatch: Colors.blue,
       ),
-      home: const WelcomeScreen(), // 初期画面としてWelcomeScreenを指定
+      // --- ここから追加 ---
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('ja', 'JP'),
+      ],
+      // --- ここまで追加 ---
+      home: const WelcomeScreen(),
     );
   }
 }

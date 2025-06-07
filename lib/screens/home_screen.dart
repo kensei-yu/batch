@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'timeline_screen.dart';
-import 'chat_screen.dart';
+import 'user_list_screen.dart';
 import 'my_page_screen.dart';
 import 'post_screen.dart'; // PostScreen をインポート
 
@@ -16,7 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final List<Widget> _pages = [
     const TimelineScreen(),
-    const ChatScreen(),
+    const UserListScreen(),
     const MyPageScreen(),
   ];
 
