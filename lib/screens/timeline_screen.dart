@@ -2,8 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class TimelineScreen extends StatelessWidget {
+class TimelineScreen extends StatefulWidget {
   const TimelineScreen({Key? key}) : super(key: key);
+
+  @override
+  State<TimelineScreen> createState() => _TimelineScreenState();
+}
+
+class _TimelineScreenState extends State<TimelineScreen> {
+  final _currentUser = FirebaseAuth.instance.currentUser;
 
   Future<void> _deletePost(BuildContext context, String postId) async {
     bool? confirmDelete = await showDialog<bool>(
@@ -36,14 +43,32 @@ class TimelineScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _toggleLike(String postId, int currentLikeCount) async {
+    if (_currentUser == null) return;
+    final currentUserId = _currentUser.uid;
+    
+    final likeRef = FirebaseFirestore.instance.collection('users').doc(currentUserId).collection('liked_posts').doc(postId);
+    final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
+
+    final doc = await likeRef.get();
+
+    if (doc.exists) {
+      // いいね解除
+      likeRef.delete();
+      postRef.update({'likeCount': FieldValue.increment(-1)});
+    } else {
+      // いいねする
+      likeRef.set({'timestamp': FieldValue.serverTimestamp()});
+      postRef.update({'likeCount': FieldValue.increment(1)});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final currentUser = FirebaseAuth.instance.currentUser;
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BATCH'), // アプリ名
-        automaticallyImplyLeading: false, // HomeScreenで管理するため不要
+        title: const Text('BATCH'),
+        automaticallyImplyLeading: false,
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -69,91 +94,71 @@ class TimelineScreen extends StatelessWidget {
               final post = posts[index];
               final data = post.data() as Map<String, dynamic>;
               final postId = post.id;
-              final String postUserId = data['userId']; //投稿者のUID
-              final bool isOwner = currentUser?.uid == postUserId;
+              final String postUserId = data['userId'];
+              final bool isOwner = _currentUser?.uid == postUserId;
+              final int likeCount = data['likeCount'] ?? 0;
 
               return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(postUserId) //投稿者のUIDを使用
-                    .get(),
+                future: FirebaseFirestore.instance.collection('users').doc(postUserId).get(),
                 builder: (context, userSnapshot) {
-                  // ローディング中の表示 (任意)
-                  // if (userSnapshot.connectionState == ConnectionState.waiting) {
-                  //   return const Card(child: ListTile(title: Text("ユーザー情報読み込み中...")));
-                  // }
-
-                  if (userSnapshot.hasError) {
-                    // ユーザー情報取得エラーの場合の表示
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      child: ListTile(
-                        leading: const CircleAvatar(child: Icon(Icons.error)),
-                        title: const Text('ユーザー情報取得エラー', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                        subtitle: Text(data['content'] ?? ''),
-                        trailing: isOwner
-                            ? IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _deletePost(context, postId),
-                              )
-                            : null,
-                      ),
+                  if (!userSnapshot.hasData) {
+                    return const Card(
+                      child: ListTile(title: Text("読み込み中..."))
                     );
                   }
                   
-                  // ユーザー情報が存在しない場合のフォールバック
-                  if (!userSnapshot.hasData || !userSnapshot.data!.exists) {
-                     return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      child: ListTile(
-                        leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-                        title: const Text('不明なユーザー', style: TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(data['content'] ?? ''),
-                        trailing: isOwner
-                            ? IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                onPressed: () => _deletePost(context, postId),
-                              )
-                            : null,
-                      ),
-                    );
-                  }
-
-                  final userInfo = userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
-                  
-                  // 表示名: nicknameがあればそれを、なければname、それもなければ「ゲストユーザー」
-                  final displayName = userInfo['nickname']?.toString().isNotEmpty == true
-                      ? userInfo['nickname']
-                      : (userInfo['name']?.toString().isNotEmpty == true 
-                          ? userInfo['name'] 
-                          : 'ゲストユーザー');
-                  
-                  // プロフィール画像のURL
-                  final String? imageUrl = userInfo['imageUrl'] as String?;
+                  final userInfo = userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
+                  final displayName = userInfo['nickname'] ?? 'ゲストユーザー';
+                  final String? imageUrl = userInfo['imageUrl'];
 
                   return Card(
                     margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: (imageUrl != null && imageUrl.isNotEmpty)
-                            ? NetworkImage(imageUrl)
-                            : null, // nullの場合、childが表示される
-                        // 画像がない場合のフォールバックアイコン
-                        child: (imageUrl == null || imageUrl.isEmpty)
-                            ? const Icon(Icons.person, size: 24) 
-                            : null,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundImage: (imageUrl != null && imageUrl.isNotEmpty) ? NetworkImage(imageUrl) : null,
+                                child: (imageUrl == null || imageUrl.isEmpty) ? const Icon(Icons.person, size: 24) : null,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              const Spacer(),
+                              if (isOwner)
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.grey),
+                                  onPressed: () => _deletePost(context, postId),
+                                )
+                            ],
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
+                            child: Text(data['content'] ?? ''),
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              StreamBuilder<DocumentSnapshot>(
+                                stream: _currentUser != null ? FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).collection('liked_posts').doc(postId).snapshots() : null,
+                                builder: (context, likeSnapshot) {
+                                  final bool isLiked = likeSnapshot.hasData && likeSnapshot.data!.exists;
+                                  return IconButton(
+                                    icon: Icon(
+                                      isLiked ? Icons.favorite : Icons.favorite_border,
+                                      color: isLiked ? Colors.red : Colors.grey,
+                                    ),
+                                    onPressed: () => _toggleLike(postId, likeCount),
+                                  );
+                                },
+                              ),
+                              Text('$likeCount'),
+                            ],
+                          ),
+                        ],
                       ),
-                      title: Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Padding( // 投稿内容の上に少しマージン
-                        padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(data['content'] ?? ''),
-                      ),
-                      trailing: isOwner
-                          ? IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () => _deletePost(context, postId),
-                            )
-                          : null,
                     ),
                   );
                 },
