@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_localizations/flutter_localizations.dart'; // この行をインポート
 import 'firebase_options.dart'; 
-import 'screens/welcome_screen.dart'; 
+import 'auth_gate.dart'; 
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +34,7 @@ class MyApp extends StatelessWidget {
         Locale('ja', 'JP'),
       ],
       // --- ここまで追加 ---
-      home: const WelcomeScreen(),
+      home: const AuthGate(),
     );
   }
 }
