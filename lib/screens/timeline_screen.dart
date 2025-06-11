@@ -47,7 +47,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
 
   Future<void> _toggleLike(String postId) async {
     if (_currentUser == null) return;
-    final currentUserId = _currentUser.uid;
+    final currentUserId = _currentUser!.uid;
     
     final likeRef = FirebaseFirestore.instance.collection('users').doc(currentUserId).collection('liked_posts').doc(postId);
     final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
@@ -94,10 +94,23 @@ class _TimelineScreenState extends State<TimelineScreen> {
               final post = posts[index];
               final data = post.data() as Map<String, dynamic>;
               final postId = post.id;
-              final String postUserId = data['userId'];
+              
+              // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+              // ★ ここがエラー修正箇所です
+              // ★ `userId`がnullの場合にクラッシュするのを防ぎます
+              // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+              final dynamic postUserIdValue = data['userId'];
+
+              // userIdがnullまたは文字列でない不正なデータは表示しない
+              if (postUserIdValue == null || postUserIdValue is! String) {
+                return const SizedBox.shrink(); // この投稿をスキップ
+              }
+              
+              final String postUserId = postUserIdValue;
+              // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+
               final bool isOwner = _currentUser?.uid == postUserId;
               final int likeCount = data['likeCount'] ?? 0;
-              // ★★★ コメント数を取得 ★★★
               final int commentCount = data['commentCount'] ?? 0;
 
               return FutureBuilder<DocumentSnapshot>(
