@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'user_profile_screen.dart';
+import 'post_detail_screen.dart';
 
 class TimelineScreen extends StatefulWidget {
   const TimelineScreen({Key? key}) : super(key: key);
@@ -43,7 +45,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
     }
   }
 
-  Future<void> _toggleLike(String postId, int currentLikeCount) async {
+  Future<void> _toggleLike(String postId) async {
     if (_currentUser == null) return;
     final currentUserId = _currentUser.uid;
     
@@ -53,11 +55,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
     final doc = await likeRef.get();
 
     if (doc.exists) {
-      // いいね解除
       likeRef.delete();
       postRef.update({'likeCount': FieldValue.increment(-1)});
     } else {
-      // いいねする
       likeRef.set({'timestamp': FieldValue.serverTimestamp()});
       postRef.update({'likeCount': FieldValue.increment(1)});
     }
@@ -97,14 +97,14 @@ class _TimelineScreenState extends State<TimelineScreen> {
               final String postUserId = data['userId'];
               final bool isOwner = _currentUser?.uid == postUserId;
               final int likeCount = data['likeCount'] ?? 0;
+              // ★★★ コメント数を取得 ★★★
+              final int commentCount = data['commentCount'] ?? 0;
 
               return FutureBuilder<DocumentSnapshot>(
                 future: FirebaseFirestore.instance.collection('users').doc(postUserId).get(),
                 builder: (context, userSnapshot) {
                   if (!userSnapshot.hasData) {
-                    return const Card(
-                      child: ListTile(title: Text("読み込み中..."))
-                    );
+                    return const Card(child: ListTile(title: Text("読み込み中...")));
                   }
                   
                   final userInfo = userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
@@ -112,37 +112,60 @@ class _TimelineScreenState extends State<TimelineScreen> {
                   final String? imageUrl = userInfo['imageUrl'];
 
                   return Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    elevation: 2.0,
+                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: Padding(
-                      padding: const EdgeInsets.all(8.0),
+                      padding: const EdgeInsets.all(12.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundImage: (imageUrl != null && imageUrl.isNotEmpty) ? NetworkImage(imageUrl) : null,
-                                child: (imageUrl == null || imageUrl.isEmpty) ? const Icon(Icons.person, size: 24) : null,
-                              ),
-                              const SizedBox(width: 10),
-                              Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              const Spacer(),
-                              if (isOwner)
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.grey),
-                                  onPressed: () => _deletePost(context, postId),
-                                )
-                            ],
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.push(context, MaterialPageRoute(
+                                builder: (context) => UserProfileScreen(userId: postUserId),
+                              ));
+                            },
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 22,
+                                  backgroundImage: (imageUrl != null && imageUrl.isNotEmpty) ? NetworkImage(imageUrl) : null,
+                                  child: (imageUrl == null || imageUrl.isEmpty) ? const Icon(Icons.person, size: 22) : null,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                      if(data['timestamp'] != null)
+                                        Text(
+                                          (data['timestamp'] as Timestamp).toDate().toLocal().toString().substring(0, 16),
+                                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                if (isOwner)
+                                  IconButton(
+                                    icon: const Icon(Icons.more_horiz),
+                                    onPressed: () => _deletePost(context, postId),
+                                  )
+                              ],
+                            ),
                           ),
+                          const Divider(height: 24),
                           Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 8.0),
-                            child: Text(data['content'] ?? ''),
+                            padding: const EdgeInsets.symmetric(vertical: 8.0),
+                            child: Text(data['content'] ?? '', style: const TextStyle(fontSize: 15, height: 1.4)),
                           ),
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
+                              // いいねボタンと数
                               StreamBuilder<DocumentSnapshot>(
-                                stream: _currentUser != null ? FirebaseFirestore.instance.collection('users').doc(_currentUser.uid).collection('liked_posts').doc(postId).snapshots() : null,
+                                stream: _currentUser != null ? FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).collection('liked_posts').doc(postId).snapshots() : null,
                                 builder: (context, likeSnapshot) {
                                   final bool isLiked = likeSnapshot.hasData && likeSnapshot.data!.exists;
                                   return IconButton(
@@ -150,11 +173,25 @@ class _TimelineScreenState extends State<TimelineScreen> {
                                       isLiked ? Icons.favorite : Icons.favorite_border,
                                       color: isLiked ? Colors.red : Colors.grey,
                                     ),
-                                    onPressed: () => _toggleLike(postId, likeCount),
+                                    onPressed: () => _toggleLike(postId),
                                   );
                                 },
                               ),
-                              Text('$likeCount'),
+                              Text('$likeCount', style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                              const SizedBox(width: 16),
+                              // ★★★ コメントボタンと数 ★★★
+                              IconButton(
+                                icon: const Icon(Icons.chat_bubble_outline, color: Colors.grey),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => PostDetailScreen(postId: postId),
+                                    ),
+                                  );
+                                },
+                              ),
+                              Text('$commentCount', style: const TextStyle(color: Colors.grey, fontSize: 14)),
                             ],
                           ),
                         ],

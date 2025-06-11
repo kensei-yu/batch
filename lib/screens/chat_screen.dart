@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ChatScreen extends StatefulWidget {
-  // チャット相手のユーザー情報を保持する
   final Map<String, dynamic> peerUser;
 
   const ChatScreen({Key? key, required this.peerUser}) : super(key: key);
@@ -23,7 +22,6 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _createChatRoomId();
-    // メッセージ入力欄の変更を監視してUIを更新
     _messageController.addListener(() {
       setState(() {});
     });
@@ -39,7 +37,6 @@ class _ChatScreenState extends State<ChatScreen> {
   void _createChatRoomId() {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null || widget.peerUser['uid'] == null) {
-      print("Error: Current user or peer user UID is null.");
       return;
     }
     
@@ -65,18 +62,23 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     try {
-      await FirebaseFirestore.instance
-          .collection('chat_rooms')
-          .doc(chatRoomId)
-          .collection('messages')
-          .add({
+      final chatRoomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(chatRoomId);
+
+      // メッセージを書き込む
+      await chatRoomRef.collection('messages').add({
         'userId': user.uid,
         'message': _messageController.text.trim(),
         'timestamp': FieldValue.serverTimestamp(),
       });
+      
+      // チャットルーム情報（参加者IDと最終更新日時）をセット/更新する
+      await chatRoomRef.set({
+        'userIds': [user.uid, widget.peerUser['uid']],
+        'lastUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
       _messageController.clear();
       
-      // 送信後に一番下にスクロール
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
           0.0,
@@ -97,33 +99,28 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // 相手のプロフィール画像のURLを取得
     final String? peerImageUrl = widget.peerUser['imageUrl'];
 
     return Scaffold(
       appBar: AppBar(
            leading: IconButton(
-        icon: const Icon(Icons.arrow_back), // 表示したい矢印アイコン
+        icon: const Icon(Icons.arrow_back),
         onPressed: () {
-          Navigator.of(context).pop(); // 前の画面に戻る動作
+          Navigator.of(context).pop();
         },
       ),
-        // titleにRowウィジェットを使い、アイコンと名前を横並びにする
         title: Row(
           children: [
-            // 相手のプロフィールアイコンを表示
             CircleAvatar(
-              radius: 15, // アイコンのサイズを調整
+              radius: 18,
               backgroundImage: (peerImageUrl != null && peerImageUrl.isNotEmpty)
                   ? NetworkImage(peerImageUrl)
                   : null,
-              // 画像がない場合は人型のアイコンを表示
               child: (peerImageUrl == null || peerImageUrl.isEmpty)
-                  ? const Icon(Icons.person, size: 15)
+                  ? const Icon(Icons.person, size: 18)
                   : null,
             ),
-            const SizedBox(width:15), // アイコンと名前の間のスペース
-            // 相手の名前を表示
+            const SizedBox(width:12),
             Text(widget.peerUser['nickname'] ?? 'チャット'),
           ],
         ),
@@ -159,6 +156,7 @@ class _ChatScreenState extends State<ChatScreen> {
                              return Align(
                                 alignment: isCurrentUser ? Alignment.centerRight : Alignment.centerLeft,
                                 child: Container(
+                                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
                                   margin: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
                                   padding: const EdgeInsets.all(12.0),
                                   decoration: BoxDecoration(
@@ -174,21 +172,15 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
             ),
             
-            // メッセージ入力欄
             Padding(
               padding: const EdgeInsets.all(8.0),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  // 「+」ボタン
                   IconButton(
                     icon: const Icon(Icons.add_circle_outline),
-                    onPressed: () {
-                      // TODO: 「+」ボタンが押された時の動作をここに実装（画像送信など）
-                      print("「+」ボタンが押されました");
-                    },
+                    onPressed: () {},
                   ),
-                  // メッセージ入力欄
                   Expanded(
                     child: TextField(
                       controller: _messageController,
@@ -204,7 +196,6 @@ class _ChatScreenState extends State<ChatScreen> {
                       onSubmitted: _isSending ? null : (_) => _sendMessage(),
                     ),
                   ),
-                  // 送信中 or 送信/ボイスボタン
                   _isSending
                     ? const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 12.0),
@@ -216,15 +207,11 @@ class _ChatScreenState extends State<ChatScreen> {
                             : const Icon(Icons.mic_none),
                         onPressed: _messageController.text.isNotEmpty
                             ? _sendMessage
-                            : () {
-                                // TODO: ボイスメッセージの録音開始処理
-                                print("ボイスボタンが押されました");
-                              },
+                            : () {},
                       ),
                 ],
               ),
             ),
-            // 下部の空白
             const SizedBox(height: 8.0), 
           ],
         ),

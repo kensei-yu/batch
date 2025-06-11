@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'edit_profile_screen.dart';
 import 'welcome_screen.dart';
+import 'follow_list_screen.dart';
 
 class MyPageScreen extends StatefulWidget {
   const MyPageScreen({Key? key}) : super(key: key);
@@ -17,10 +18,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
   Future<Map<String, dynamic>?> _loadUserProfile() async {
     if (user == null) return null;
     final doc = await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
-    if (doc.exists) {
-      return doc.data();
-    }
-    return {'email': user!.email}; // フォールバック
+    return doc.exists ? doc.data() : {'email': user!.email};
   }
 
   Future<void> _logout() async {
@@ -77,23 +75,41 @@ class _MyPageScreenState extends State<MyPageScreen> {
               headerSliverBuilder: (context, innerBoxIsScrolled) {
                 return [
                   SliverAppBar(
-                    expandedHeight: 200.0,
+                    expandedHeight: 220.0,
                     floating: false,
                     pinned: true,
+                    stretch: true,
                     automaticallyImplyLeading: false,
                     actions: [
                       IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
                     ],
                     flexibleSpace: FlexibleSpaceBar(
-                      background: userProfile['headerImageUrl'] != null
-                        ? Image.network(
-                            userProfile['headerImageUrl'],
-                            fit: BoxFit.cover,
-                          )
-                        : Image.network(
-                            'https://images.unsplash.com/photo-1504805572947-34fad45aed93?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+                      centerTitle: true,
+                      title: Text(
+                        userProfile['nickname'] ?? 'ゲストユーザー',
+                        style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold),
+                      ),
+                      background: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.network(
+                            userProfile['headerImageUrl'] ?? 'https://images.unsplash.com/photo-1504805572947-34fad45aed93?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
                             fit: BoxFit.cover,
                           ),
+                          const DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment(0.0, 0.5),
+                                end: Alignment.center,
+                                colors: <Color>[
+                                  Color(0x60000000),
+                                  Color(0x00000000),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   SliverToBoxAdapter(
@@ -103,30 +119,36 @@ class _MyPageScreenState extends State<MyPageScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.end,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              CircleAvatar(
-                                radius: 40,
-                                backgroundColor: Colors.white,
+                               CircleAvatar(
+                                radius: 45,
+                                backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                                 child: CircleAvatar(
-                                  radius: 38,
+                                  radius: 42,
                                   backgroundImage: userProfile['imageUrl'] != null ? NetworkImage(userProfile['imageUrl']) : null,
-                                  child: userProfile['imageUrl'] == null ? const Icon(Icons.person, size: 40) : null,
+                                  child: userProfile['imageUrl'] == null ? const Icon(Icons.person, size: 45) : null,
                                 ),
                               ),
-                              ElevatedButton(
-                                onPressed: _editProfile,
-                                child: const Text('プロフィールを編集'),
-                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  children: [
+                                     _buildFollowStats(user!.uid),
+                                     const SizedBox(height: 8),
+                                     SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton(
+                                        onPressed: _editProfile,
+                                        child: const Text('プロフィールを編集'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
                             ],
                           ),
                           const SizedBox(height: 12),
-                          Text(
-                            userProfile['nickname'] ?? 'ゲストユーザー',
-                            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 4),
                           Text(
                             '@${userProfile['email']?.split('@')[0] ?? 'guest'}',
                             style: const TextStyle(fontSize: 16, color: Colors.grey),
@@ -134,10 +156,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
                           const SizedBox(height: 12),
                           Text(
                             userProfile['bio'] ?? '自己紹介がありません。',
-                            style: const TextStyle(fontSize: 16),
+                            style: const TextStyle(fontSize: 16, height: 1.5),
                           ),
-                          const SizedBox(height: 16),
-                          _buildFollowStats(user!.uid),
                         ],
                       ),
                     ),
@@ -173,34 +193,51 @@ class _MyPageScreenState extends State<MyPageScreen> {
 
   Widget _buildFollowStats(String userId) {
     return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').doc(userId).collection('following').snapshots(),
-          builder: (context, snapshot) {
-            final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
-            return Text('$count', style: const TextStyle(fontWeight: FontWeight.bold));
+        InkWell(
+          onTap: () {
+            Navigator.push(context, MaterialPageRoute(
+              builder: (context) => FollowListScreen(userId: userId, listType: 'following'),
+            ));
           },
+          child: Column(
+            children: [
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('users').doc(userId).collection('following').snapshots(),
+                builder: (context, snapshot) {
+                  final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                  return Text('$count', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16));
+                },
+              ),
+              const Text('フォロー中', style: TextStyle(color: Colors.grey)),
+            ],
+          ),
         ),
-        const SizedBox(width: 4),
-        const Text('フォロー中', style: TextStyle(color: Colors.grey)),
-        const SizedBox(width: 16),
-        StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').doc(userId).collection('followers').snapshots(),
-          builder: (context, snapshot) {
-            final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
-            return Text('$count', style: const TextStyle(fontWeight: FontWeight.bold));
+        InkWell(
+          onTap: () {
+            Navigator.push(context, MaterialPageRoute(
+              builder: (context) => FollowListScreen(userId: userId, listType: 'followers'),
+            ));
           },
+          child: Column(
+            children: [
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance.collection('users').doc(userId).collection('followers').snapshots(),
+                builder: (context, snapshot) {
+                  final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                  return Text('$count', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16));
+                },
+              ),
+              const Text('フォロワー', style: TextStyle(color: Colors.grey)),
+            ],
+          ),
         ),
-        const SizedBox(width: 4),
-        const Text('フォロワー', style: TextStyle(color: Colors.grey)),
       ],
     );
   }
 
   Widget _buildUserPostsView(String userId) {
-    // 【デバッグ用プリント】この関数がどのユーザーIDで呼ばれたかを確認
-    print("--- 投稿一覧表示を開始: ユーザーID = $userId ---");
-
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
@@ -208,26 +245,17 @@ class _MyPageScreenState extends State<MyPageScreen> {
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        // 【デバッグ用プリント】エラーが発生した場合に内容を表示
         if (snapshot.hasError) {
-          print("--- 投稿一覧でエラー発生: ${snapshot.error} ---");
           return Center(child: Text('エラーが発生しました: ${snapshot.error}'));
         }
-
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        // 【デバッグ用プリント】取得した投稿の件数を表示
-        final postCount = snapshot.data?.docs.length ?? 0;
-        print("--- 投稿一覧のデータ受信: $postCount 件 ---");
-
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(child: Text('まだ投稿がありません。'));
         }
         
         final posts = snapshot.data!.docs;
-
         return ListView.builder(
           padding: EdgeInsets.zero,
           itemCount: posts.length,
@@ -247,11 +275,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
     );
   }
 
-
   Widget _buildLikedPostsView(String userId) {
-    // 【デバッグ用プリント】この関数がどのユーザーIDで呼ばれたかを確認
-    print("--- いいね一覧表示を開始: ユーザーID = $userId ---");
-
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
@@ -260,28 +284,17 @@ class _MyPageScreenState extends State<MyPageScreen> {
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        // 【デバッグ用プリント】エラーが発生した場合に内容を表示
         if (snapshot.hasError) {
-          print("--- いいね一覧でエラー発生: ${snapshot.error} ---");
           return Center(child: Text('エラーが発生しました: ${snapshot.error}'));
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        // 【デバッグ用プリント】取得した「いいね」の件数を表示
-        final likedCount = snapshot.data?.docs.length ?? 0;
-        print("--- いいね一覧のデータ受信: $likedCount 件 ---");
-
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(child: Text('いいねした投稿がありません。'));
         }
 
         final likedPostIds = snapshot.data!.docs.map((doc) => doc.id).toList();
-        
-        // 【デバッグ用プリント】いいねした投稿のIDリストを表示
-        print("--- いいねした投稿のIDリスト: $likedPostIds ---");
-
         if (likedPostIds.isEmpty) {
            return const Center(child: Text('いいねした投稿がありません。'));
         }
@@ -297,7 +310,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
             }
 
             final posts = postSnapshots.data!.where((doc) => doc.exists).toList();
-
             return ListView.builder(
               padding: EdgeInsets.zero,
               itemCount: posts.length,
@@ -352,7 +364,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
 
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   const _SliverAppBarDelegate(this._tabBar);
-
   final TabBar _tabBar;
 
   @override

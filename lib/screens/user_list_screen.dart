@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'chat_screen.dart';
+import 'user_profile_screen.dart'; // UserProfileScreenをインポート
 
 class UserListScreen extends StatefulWidget {
   const UserListScreen({Key? key}) : super(key: key);
@@ -23,11 +23,9 @@ class _UserListScreenState extends State<UserListScreen> {
     final doc = await followingRef.get();
 
     if (doc.exists) {
-      // アンフォロー
       followingRef.delete();
       followerRef.delete();
     } else {
-      // フォロー
       followingRef.set({'timestamp': FieldValue.serverTimestamp()});
       followerRef.set({'timestamp': FieldValue.serverTimestamp()});
     }
@@ -41,7 +39,7 @@ class _UserListScreenState extends State<UserListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('チャット相手を選択'),
+        title: const Text('ユーザーを探す'), // タイトル変更
         automaticallyImplyLeading: false,
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -61,7 +59,7 @@ class _UserListScreenState extends State<UserListScreen> {
               final String peerUserId = userDoc.id;
 
               if (_currentUser!.uid == peerUserId) {
-                return const SizedBox.shrink(); // 自分自身は表示しない
+                return const SizedBox.shrink();
               }
               
               final String? imageUrl = userData['imageUrl'];
@@ -73,16 +71,11 @@ class _UserListScreenState extends State<UserListScreen> {
                 ),
                 title: Text(userData['nickname'] ?? '不明なユーザー'),
                 onTap: () {
+                  // ★ プロフィール画面へ遷移
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => ChatScreen(
-                        peerUser: {
-                          'uid': peerUserId,
-                          'nickname': userData['nickname'] ?? '不明なユーザー',
-                          'imageUrl': userData['imageUrl']
-                        },
-                      ),
+                      builder: (context) => UserProfileScreen(userId: peerUserId),
                     ),
                   );
                 },
@@ -95,7 +88,6 @@ class _UserListScreenState extends State<UserListScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: isFollowing ? Colors.grey : Theme.of(context).primaryColor,
                       ),
-      
                       child: Text(isFollowing ? 'フォロー中' : 'フォロー', style: const TextStyle(color: Colors.white)),
                     );
                   },
