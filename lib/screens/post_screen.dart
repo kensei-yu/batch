@@ -1,3 +1,5 @@
+// lib/screens/post_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -39,6 +41,7 @@ class _PostScreenState extends State<PostScreen> {
         'userId': user.uid,
         'content': _postController.text.trim(),
         'timestamp': FieldValue.serverTimestamp(),
+        'likeCount': 0, // この行を修正（追加）
         // 'userName': user.displayName, // 必要であればユーザー名も保存
         // 'userImage': user.photoURL,   // 必要であればユーザー画像URLも保存
       });

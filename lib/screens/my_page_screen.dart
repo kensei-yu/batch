@@ -46,7 +46,6 @@ class _MyPageScreenState extends State<MyPageScreen> {
   }
   
   Future<void> _editProfile() async {
-    // 編集画面から戻ってきたら、setStateを呼んでFutureBuilderをリビルドさせる
     final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfileScreen()));
     if (result == true && mounted) {
       setState(() {});
@@ -199,6 +198,9 @@ class _MyPageScreenState extends State<MyPageScreen> {
   }
 
   Widget _buildUserPostsView(String userId) {
+    // 【デバッグ用プリント】この関数がどのユーザーIDで呼ばれたかを確認
+    print("--- 投稿一覧表示を開始: ユーザーID = $userId ---");
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
@@ -206,9 +208,20 @@ class _MyPageScreenState extends State<MyPageScreen> {
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
+        // 【デバッグ用プリント】エラーが発生した場合に内容を表示
+        if (snapshot.hasError) {
+          print("--- 投稿一覧でエラー発生: ${snapshot.error} ---");
+          return Center(child: Text('エラーが発生しました: ${snapshot.error}'));
+        }
+
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
+        // 【デバッグ用プリント】取得した投稿の件数を表示
+        final postCount = snapshot.data?.docs.length ?? 0;
+        print("--- 投稿一覧のデータ受信: $postCount 件 ---");
+
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(child: Text('まだ投稿がありません。'));
         }
@@ -234,7 +247,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
     );
   }
 
+
   Widget _buildLikedPostsView(String userId) {
+    // 【デバッグ用プリント】この関数がどのユーザーIDで呼ばれたかを確認
+    print("--- いいね一覧表示を開始: ユーザーID = $userId ---");
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
@@ -243,15 +260,28 @@ class _MyPageScreenState extends State<MyPageScreen> {
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
+        // 【デバッグ用プリント】エラーが発生した場合に内容を表示
+        if (snapshot.hasError) {
+          print("--- いいね一覧でエラー発生: ${snapshot.error} ---");
+          return Center(child: Text('エラーが発生しました: ${snapshot.error}'));
+        }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
+        // 【デバッグ用プリント】取得した「いいね」の件数を表示
+        final likedCount = snapshot.data?.docs.length ?? 0;
+        print("--- いいね一覧のデータ受信: $likedCount 件 ---");
+
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(child: Text('いいねした投稿がありません。'));
         }
 
         final likedPostIds = snapshot.data!.docs.map((doc) => doc.id).toList();
         
+        // 【デバッグ用プリント】いいねした投稿のIDリストを表示
+        print("--- いいねした投稿のIDリスト: $likedPostIds ---");
+
         if (likedPostIds.isEmpty) {
            return const Center(child: Text('いいねした投稿がありません。'));
         }
@@ -272,13 +302,44 @@ class _MyPageScreenState extends State<MyPageScreen> {
               padding: EdgeInsets.zero,
               itemCount: posts.length,
               itemBuilder: (context, index) {
-                final postData = posts[index].data() as Map<String, dynamic>;
-                return Card(
-                  margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: ListTile(
-                    title: Text(postData['content'] ?? ''),
-                     subtitle: Text((postData['timestamp'] as Timestamp?)?.toDate().toLocal().toString() ?? ''),
-                  ),
+                final postDoc = posts[index];
+                final postData = postDoc.data() as Map<String, dynamic>;
+                final String postAuthorId = postData['userId'];
+
+                return FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance.collection('users').doc(postAuthorId).get(),
+                  builder: (context, userSnapshot) {
+                    if (userSnapshot.connectionState == ConnectionState.waiting) {
+                       return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: ListTile(
+                          title: Text(postData['content'] ?? ''),
+                          subtitle: const Text('読み込み中...'),
+                        ),
+                      );
+                    }
+                    if (!userSnapshot.hasData) {
+                      return const SizedBox.shrink();
+                    }
+
+                    final authorData = userSnapshot.data!.data() as Map<String, dynamic>;
+                    
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: authorData['imageUrl'] != null
+                              ? NetworkImage(authorData['imageUrl'])
+                              : null,
+                          child: authorData['imageUrl'] == null
+                              ? const Icon(Icons.person)
+                              : null,
+                        ),
+                        title: Text(authorData['nickname'] ?? 'ゲスト', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(postData['content'] ?? ''),
+                      ),
+                    );
+                  },
                 );
               },
             );
