@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'user_profile_screen.dart';
 import 'post_detail_screen.dart';
+import 'notification_screen.dart'; // 通知画面をインポート
 
 class TimelineScreen extends StatefulWidget {
   const TimelineScreen({Key? key}) : super(key: key);
@@ -45,7 +46,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
     }
   }
 
-  Future<void> _toggleLike(String postId) async {
+  Future<void> _toggleLike(String postId, String postAuthorId) async {
     if (_currentUser == null) return;
     final currentUserId = _currentUser!.uid;
     
@@ -60,6 +61,28 @@ class _TimelineScreenState extends State<TimelineScreen> {
     } else {
       likeRef.set({'timestamp': FieldValue.serverTimestamp()});
       postRef.update({'likeCount': FieldValue.increment(1)});
+
+      // 自分の投稿でなければ通知を作成
+      if (currentUserId != postAuthorId) {
+        final notificationRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(postAuthorId) // 投稿者のID
+            .collection('notifications')
+            .doc(); // 新しいドキュメントIDを自動生成
+
+        final currentUserDoc = await FirebaseFirestore.instance.collection('users').doc(currentUserId).get();
+        final currentUserNickname = currentUserDoc.data()?['nickname'] ?? '誰か';
+
+        await notificationRef.set({
+          'id': notificationRef.id,
+          'type': 'like',
+          'senderId': currentUserId,
+          'message': '$currentUserNickname さんがあなたの投稿に「いいね」しました。',
+          'postId': postId,
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      }
     }
   }
 
@@ -69,6 +92,9 @@ class _TimelineScreenState extends State<TimelineScreen> {
       appBar: AppBar(
         title: const Text('BATCH'),
         automaticallyImplyLeading: false,
+        actions: [
+          _buildNotificationButton(context),
+        ],
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -95,20 +121,13 @@ class _TimelineScreenState extends State<TimelineScreen> {
               final data = post.data() as Map<String, dynamic>;
               final postId = post.id;
               
-              // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-              // ★ ここがエラー修正箇所です
-              // ★ `userId`がnullの場合にクラッシュするのを防ぎます
-              // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
               final dynamic postUserIdValue = data['userId'];
 
-              // userIdがnullまたは文字列でない不正なデータは表示しない
               if (postUserIdValue == null || postUserIdValue is! String) {
-                return const SizedBox.shrink(); // この投稿をスキップ
+                return const SizedBox.shrink();
               }
               
               final String postUserId = postUserIdValue;
-              // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-
               final bool isOwner = _currentUser?.uid == postUserId;
               final int likeCount = data['likeCount'] ?? 0;
               final int commentCount = data['commentCount'] ?? 0;
@@ -176,7 +195,6 @@ class _TimelineScreenState extends State<TimelineScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.end,
                             children: [
-                              // いいねボタンと数
                               StreamBuilder<DocumentSnapshot>(
                                 stream: _currentUser != null ? FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).collection('liked_posts').doc(postId).snapshots() : null,
                                 builder: (context, likeSnapshot) {
@@ -186,13 +204,12 @@ class _TimelineScreenState extends State<TimelineScreen> {
                                       isLiked ? Icons.favorite : Icons.favorite_border,
                                       color: isLiked ? Colors.red : Colors.grey,
                                     ),
-                                    onPressed: () => _toggleLike(postId),
+                                    onPressed: () => _toggleLike(postId, postUserId),
                                   );
                                 },
                               ),
                               Text('$likeCount', style: const TextStyle(color: Colors.grey, fontSize: 14)),
                               const SizedBox(width: 16),
-                              // ★★★ コメントボタンと数 ★★★
                               IconButton(
                                 icon: const Icon(Icons.chat_bubble_outline, color: Colors.grey),
                                 onPressed: () {
@@ -217,6 +234,61 @@ class _TimelineScreenState extends State<TimelineScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildNotificationButton(BuildContext context) {
+    if (_currentUser == null) return const SizedBox.shrink();
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .doc(_currentUser!.uid)
+          .collection('notifications')
+          .where('isRead', isEqualTo: false)
+          .snapshots(),
+      builder: (context, snapshot) {
+        final unreadCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
+
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.notifications_outlined),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const NotificationScreen()),
+                );
+              },
+            ),
+            if (unreadCount > 0)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: Colors.red,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: Text(
+                    '$unreadCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

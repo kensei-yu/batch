@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'user_profile_screen.dart'; // UserProfileScreenをインポート
+import 'user_profile_screen.dart'; 
 
 class UserListScreen extends StatefulWidget {
   const UserListScreen({Key? key}) : super(key: key);
@@ -15,7 +15,7 @@ class _UserListScreenState extends State<UserListScreen> {
 
   Future<void> _toggleFollow(String targetUserId) async {
     if (_currentUser == null) return;
-    final currentUserId = _currentUser.uid;
+    final currentUserId = _currentUser!.uid;
 
     final followingRef = FirebaseFirestore.instance.collection('users').doc(currentUserId).collection('following').doc(targetUserId);
     final followerRef = FirebaseFirestore.instance.collection('users').doc(targetUserId).collection('followers').doc(currentUserId);
@@ -28,6 +28,25 @@ class _UserListScreenState extends State<UserListScreen> {
     } else {
       followingRef.set({'timestamp': FieldValue.serverTimestamp()});
       followerRef.set({'timestamp': FieldValue.serverTimestamp()});
+
+      // 通知作成ロジック
+      final notificationRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(targetUserId) // フォローされた人のID
+          .collection('notifications')
+          .doc();
+
+      final currentUserDoc = await FirebaseFirestore.instance.collection('users').doc(currentUserId).get();
+      final currentUserNickname = currentUserDoc.data()?['nickname'] ?? '誰か';
+          
+      await notificationRef.set({
+        'id': notificationRef.id,
+        'type': 'follow',
+        'senderId': currentUserId,
+        'message': '$currentUserNickname さんにフォローされました。',
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
     }
   }
 
@@ -39,7 +58,7 @@ class _UserListScreenState extends State<UserListScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ユーザーを探す'), // タイトル変更
+        title: const Text('ユーザーを探す'),
         automaticallyImplyLeading: false,
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -71,7 +90,6 @@ class _UserListScreenState extends State<UserListScreen> {
                 ),
                 title: Text(userData['nickname'] ?? '不明なユーザー'),
                 onTap: () {
-                  // ★ プロフィール画面へ遷移
                   Navigator.push(
                     context,
                     MaterialPageRoute(

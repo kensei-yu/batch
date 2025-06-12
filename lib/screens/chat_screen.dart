@@ -1,3 +1,5 @@
+// lib/screens/chat_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -51,7 +53,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _sendMessage() async {
-    if (_messageController.text.trim().isEmpty || chatRoomId == null) return;
+    final messageText = _messageController.text.trim();
+    if (messageText.isEmpty || chatRoomId == null) return;
 
     setState(() { _isSending = true; });
 
@@ -63,20 +66,29 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final chatRoomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(chatRoomId);
+      final messagesRef = chatRoomRef.collection('messages');
 
-      // メッセージを書き込む
-      await chatRoomRef.collection('messages').add({
-        'userId': user.uid,
-        'message': _messageController.text.trim(),
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-      
-      // チャットルーム情報（参加者IDと最終更新日時）をセット/更新する
+      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+      // ★【エラー修正箇所 1/3】
+      // ★ 先にチャットルーム情報（参加者リストや最終メッセージ）を更新・作成する。
+      // ★ これにより、この後のメッセージ書き込み時に行われる権限チェックが成功する。
+      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
       await chatRoomRef.set({
         'userIds': [user.uid, widget.peerUser['uid']],
         'lastUpdatedAt': FieldValue.serverTimestamp(),
+        'lastMessage': messageText, // chat_list_screenで表示するための最終メッセージ
       }, SetOptions(merge: true));
 
+      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+      // ★【エラー修正箇所 2/3】
+      // ★ セキュリティルールに合わせてフィールド名を 'userId' から 'senderId' に変更。
+      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+      await messagesRef.add({
+        'senderId': user.uid, // "userId"から"senderId"に変更
+        'message': messageText,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      
       _messageController.clear();
       
       if (_scrollController.hasClients) {
@@ -88,6 +100,7 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       if(mounted) {
+        print('Message send error: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('メッセージの送信に失敗しました: $e')),
         );
@@ -103,12 +116,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-           leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: () {
-          Navigator.of(context).pop();
-        },
-      ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.of(context).pop();
+          },
+        ),
         title: Row(
           children: [
             CircleAvatar(
@@ -139,7 +152,10 @@ class _ChatScreenState extends State<ChatScreen> {
                           .orderBy('timestamp', descending: true)
                           .snapshots(),
                       builder: (context, snapshot) {
-                        if (snapshot.hasError) return Center(child: Text('エラー: ${snapshot.error}'));
+                        if (snapshot.hasError) {
+                          print('Message stream error: ${snapshot.error}');
+                          return Center(child: Text('エラー: ${snapshot.error}'));
+                        }
                         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
                         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text('メッセージを送信してみましょう'));
                         
@@ -152,7 +168,13 @@ class _ChatScreenState extends State<ChatScreen> {
                           itemBuilder: (context, index) {
                              final message = messages[index];
                              final data = message.data() as Map<String, dynamic>;
-                             final bool isCurrentUser = data['userId'] == FirebaseAuth.instance.currentUser?.uid;
+                             
+                             // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+                             // ★【エラー修正箇所 3/3】
+                             // ★ メッセージ送信時に 'senderId' に変更したため、ここも合わせる
+                             // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
+                             final bool isCurrentUser = data['senderId'] == FirebaseAuth.instance.currentUser?.uid;
+                             
                              return Align(
                                 alignment: isCurrentUser ? Alignment.centerRight : Alignment.centerLeft,
                                 child: Container(
@@ -177,10 +199,6 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.add_circle_outline),
-                    onPressed: () {},
-                  ),
                   Expanded(
                     child: TextField(
                       controller: _messageController,
@@ -202,17 +220,14 @@ class _ChatScreenState extends State<ChatScreen> {
                         child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     : IconButton(
-                        icon: _messageController.text.isNotEmpty
-                            ? const Icon(Icons.send)
-                            : const Icon(Icons.mic_none),
+                        icon: const Icon(Icons.send),
                         onPressed: _messageController.text.isNotEmpty
                             ? _sendMessage
-                            : () {},
+                            : null,
                       ),
                 ],
               ),
             ),
-            const SizedBox(height: 8.0), 
           ],
         ),
       ),
