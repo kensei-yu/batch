@@ -6,7 +6,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:intl/intl.dart'; // DateFormatのためにインポート
+import 'package:intl/intl.dart';
+
+enum ImageType { profile, header }
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({Key? key}) : super(key: key);
@@ -21,8 +23,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final TextEditingController _bioController = TextEditingController();
   String? _gender;
   DateTime? _birthDate;
-  File? _imageFile;
-  String? _currentImageUrl;
+  
+  // 画像関連のState
+  File? _profileImageFile;
+  File? _headerImageFile;
+  String? _currentProfileImageUrl;
+  String? _currentHeaderImageUrl;
+
   bool _isSaving = false;
   bool _isLoadingProfile = true;
 
@@ -32,55 +39,51 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _loadCurrentProfile();
   }
 
+  @override
+  void dispose() {
+    _nicknameController.dispose();
+    _bioController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadCurrentProfile() async {
-    setState(() {
-      _isLoadingProfile = true;
-    });
+    setState(() { _isLoadingProfile = true; });
+
     final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-        
-        if (mounted) {
-          if (doc.exists) {
-            final data = doc.data()!;
-            setState(() {
-              _nicknameController.text = data['nickname'] ?? data['name'] ?? user.displayName ?? '';
-              _bioController.text = data['bio'] ?? '';
-              _gender = data['gender'];
-              _currentImageUrl = data['imageUrl'];
-              
-              if (data['birthDate'] != null && data['birthDate'] is Timestamp) {
-                _birthDate = (data['birthDate'] as Timestamp).toDate();
-              }
-            });
-          } else {
-            setState(() {
-              _nicknameController.text = user.displayName ?? '';
-            });
+    if (user == null) {
+      if (mounted) setState(() { _isLoadingProfile = false; });
+      return;
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      
+      if (mounted && doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _nicknameController.text = data['nickname'] ?? '';
+          _bioController.text = data['bio'] ?? '';
+          _gender = data['gender'];
+          _currentProfileImageUrl = data['imageUrl'];
+          _currentHeaderImageUrl = data['headerImageUrl']; // ヘッダー画像URLを読み込む
+          
+          if (data['birthDate'] != null && data['birthDate'] is Timestamp) {
+            _birthDate = (data['birthDate'] as Timestamp).toDate();
           }
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('プロフィール情報の読み込みに失敗しました: $e')),
-          );
-        }
-      } finally {
-        if(mounted) {
-          setState(() {
-            _isLoadingProfile = false;
-          });
-        }
+        });
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('プロフィール情報の読み込みに失敗しました: $e')),
+        );
+      }
+    } finally {
+      if(mounted) setState(() { _isLoadingProfile = false; });
     }
   }
 
-  /// 画像の取得方法を選択するシートを表示する
-  void _showImageSourceActionSheet(BuildContext context) {
+  void _showImageSourceActionSheet(BuildContext context, ImageType imageType) {
     showModalBottomSheet(
       context: context,
       builder: (context) {
@@ -92,7 +95,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 title: const Text('写真を撮る'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  _pickImage(ImageSource.camera);
+                  _pickImage(ImageSource.camera, imageType);
                 },
               ),
               ListTile(
@@ -100,18 +103,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 title: const Text('アルバムから選択'),
                 onTap: () {
                   Navigator.of(context).pop();
-                  _pickImage(ImageSource.gallery);
+                  _pickImage(ImageSource.gallery, imageType);
                 },
               ),
-              if (_currentImageUrl != null || _imageFile != null)
-                ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text('画像を削除', style: TextStyle(color: Colors.red)),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _removeImage();
-                  },
-                ),
             ],
           ),
         );
@@ -119,29 +113,26 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  /// ImagePickerを使って画像を選択する
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickImage(ImageSource source, ImageType imageType) async {
     if (_isSaving) return;
     try {
       final pickedFile = await ImagePicker().pickImage(source: source, imageQuality: 70);
       if (pickedFile != null) {
         setState(() {
-          _imageFile = File(pickedFile.path);
+          if (imageType == ImageType.profile) {
+            _profileImageFile = File(pickedFile.path);
+          } else {
+            _headerImageFile = File(pickedFile.path);
+          }
         });
       }
     } catch(e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('画像選択に失敗しました: $e')),
-      );
+          SnackBar(content: Text('画像選択に失敗しました: $e')),
+        );
+      }
     }
-  }
-
-  /// 画像を削除する
-  void _removeImage() {
-    setState(() {
-      _imageFile = null;
-      _currentImageUrl = null;
-    });
   }
 
   Future<void> _selectBirthDate(BuildContext context) async {
@@ -154,34 +145,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       locale: const Locale('ja', 'JP'),
     );
     if (picked != null && picked != _birthDate) {
-      setState(() {
-        _birthDate = picked;
-      });
+      setState(() { _birthDate = picked; });
     }
   }
 
+  Future<String?> _uploadImageAndGetUrl(File imageFile, String folderPath) async {
+    final storageRef = FirebaseStorage.instance.ref(folderPath);
+    await storageRef.putFile(imageFile);
+    return await storageRef.getDownloadURL();
+  }
+
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
+    
     setState(() { _isSaving = true; });
 
     try {
       final user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        throw Exception('ユーザーが見つかりません');
+      if (user == null) throw Exception('ユーザーが見つかりません');
+
+      String? profileImageUrl = _currentProfileImageUrl;
+      String? headerImageUrl = _currentHeaderImageUrl;
+
+      // プロフィール画像のアップロード
+      if (_profileImageFile != null) {
+        profileImageUrl = await _uploadImageAndGetUrl(_profileImageFile!, 'user_images/${user.uid}/profile.jpg');
       }
 
-      String? imageUrl = _currentImageUrl;
-
-      // 新しい画像ファイルがある場合、アップロードしてURLを取得
-      if (_imageFile != null) {
-        final storageRef = FirebaseStorage.instance.ref('user_images/${user.uid}/profile.jpg'); // ファイル名を固定して上書き
-        await storageRef.putFile(_imageFile!);
-        imageUrl = await storageRef.getDownloadURL();
-      } else if (_currentImageUrl == null) {
-        // 画像が削除された場合
-        imageUrl = null;
+      // ヘッダー画像のアップロード
+      if (_headerImageFile != null) {
+        headerImageUrl = await _uploadImageAndGetUrl(_headerImageFile!, 'user_images/${user.uid}/header.jpg');
       }
 
       Map<String, dynamic> profileData = {
@@ -189,22 +182,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         'bio': _bioController.text.trim(),
         'gender': _gender,
         'birthDate': _birthDate != null ? Timestamp.fromDate(_birthDate!) : null,
-        'imageUrl': imageUrl, // 更新されたURLまたはnullをセット
+        'imageUrl': profileImageUrl,
+        'headerImageUrl': headerImageUrl, // ヘッダー画像のURLを保存
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set(profileData, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).set(profileData, SetOptions(merge: true));
 
       await user.updateDisplayName(_nicknameController.text.trim());
-      await user.updatePhotoURL(imageUrl);
+      if (profileImageUrl != null) {
+         await user.updatePhotoURL(profileImageUrl);
+      }
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('プロフィールを更新しました！')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('プロフィールを更新しました！')));
         Navigator.pop(context, true);
       }
     } catch (e) {
@@ -214,28 +205,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         );
       }
     } finally {
-      if (mounted) {
-        setState(() { _isSaving = false; });
-      }
+      if (mounted) setState(() { _isSaving = false; });
     }
   }
   
   @override
-  void dispose() {
-    _nicknameController.dispose();
-    _bioController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_isLoadingProfile) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('プロフィール編集')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    
     return Scaffold(
       appBar: AppBar(
         title: const Text('プロフィール編集'),
@@ -243,159 +218,212 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           TextButton(
             onPressed: _isSaving ? null : _saveProfile,
             child: _isSaving
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),)
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Text('保存', style: TextStyle(color: Colors.white, fontSize: 16)),
           ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'プロフィール画像',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              Center(
-                child: InkWell(
-                  onTap: () => _showImageSourceActionSheet(context),
-                  child: Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      CircleAvatar(
-                        radius: 60,
-                        backgroundColor: Colors.grey[200],
-                        backgroundImage: _imageFile != null
-                            ? FileImage(_imageFile!)
-                            : (_currentImageUrl != null && _currentImageUrl!.isNotEmpty
-                                ? NetworkImage(_currentImageUrl!)
-                                : null) as ImageProvider?,
-                        child: _imageFile == null && (_currentImageUrl == null || _currentImageUrl!.isEmpty)
-                            ? Icon(Icons.person, size: 60, color: Colors.grey[400])
-                            : null,
+      body: _isLoadingProfile
+          ? const Center(child: CircularProgressIndicator())
+          : Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    _buildImageHeader(),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const SizedBox(height: 50), // プロフィール画像との重なりを調整
+                          _buildTextField(
+                            controller: _nicknameController,
+                            label: 'ニックネーム',
+                            hint: 'ニックネームを入力',
+                            maxLength: 20,
+                            validator: (value) => (value == null || value.trim().isEmpty) ? 'ニックネームは必須です。' : null,
+                          ),
+                          const SizedBox(height: 24),
+                          _buildDropdownField(
+                            label: '性別',
+                            value: _gender,
+                            hint: '性別を選択',
+                            items: ['女性', '男性', 'その他'],
+                            onChanged: (value) => setState(() { _gender = value; }),
+                            validator: (value) => value == null ? '性別を選択してください。' : null,
+                          ),
+                          const SizedBox(height: 24),
+                          _buildDateField(
+                            label: '生年月日',
+                            value: _birthDate,
+                            onTap: () => _selectBirthDate(context),
+                             validator: (value) => value == null ? '生年月日を選択してください。' : null,
+                          ),
+                          const SizedBox(height: 24),
+                           _buildTextField(
+                            controller: _bioController,
+                            label: '自己紹介',
+                            hint: '自己紹介を入力 (任意)',
+                            maxLength: 400,
+                            maxLines: 4,
+                          ),
+                          const SizedBox(height: 30),
+                        ],
                       ),
-                      CircleAvatar(
-                        radius: 20,
-                        backgroundColor: Theme.of(context).primaryColor,
-                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 22),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 24),
+            ),
+    );
+  }
 
-              const Text(
-                'ニックネーム (必須)',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+  Widget _buildImageHeader() {
+    return SizedBox(
+      height: 200,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          // --- ヘッダー画像 ---
+          Positioned.fill(
+            child: InkWell(
+              onTap: () => _showImageSourceActionSheet(context, ImageType.header),
+              child: Container(
+                color: Colors.grey[300],
+                child: _headerImageFile != null
+                    ? Image.file(_headerImageFile!, fit: BoxFit.cover)
+                    : (_currentHeaderImageUrl != null && _currentHeaderImageUrl!.isNotEmpty
+                        ? Image.network(_currentHeaderImageUrl!, fit: BoxFit.cover)
+                        : null),
               ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _nicknameController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'ニックネームを入力',
-                  counterText: "",
-                ),
-                maxLength: 20,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'ニックネームは必須です。';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                '性別 (必須)',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: '性別を選択',
-                ),
-                value: _gender,
-                items: ['女性', '男性', 'その他']
-                    .map((label) => DropdownMenuItem(
-                          child: Text(label),
-                          value: label,
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _gender = value;
-                  });
-                },
-                validator: (value) => value == null ? '性別を選択してください。' : null,
-              ),
-              const SizedBox(height: 24),
-
-              const Text(
-                '生年月日 (必須)',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () => _selectBirthDate(context),
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                    errorText: _formKey.currentState?.validate() == false && _birthDate == null
-                               ? '生年月日を選択してください' : null,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      Text(
-                        _birthDate != null
-                            ? DateFormat('y年M月d日').format(_birthDate!)
-                            : '生年月日を選択',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: _birthDate == null ? Colors.grey[600] : Theme.of(context).textTheme.bodyLarge?.color,
-                        ),
-                      ),
-                      const Icon(Icons.calendar_today_outlined, color: Colors.grey),
-                    ],
-                  ),
-                ),
-              ),
-              FormField<DateTime>(
-                builder: (state) => const SizedBox.shrink(),
-                validator: (value) {
-                  if (_birthDate == null) return '生年月日を選択してください。';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-
-              const Text(
-                '自己紹介',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _bioController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: '自己紹介を入力 (任意)',
-                  counterText: "",
-                ),
-                maxLength: 400,
-                maxLines: 4,
-              ),
-              const SizedBox(height: 30),
-            ],
+            ),
           ),
-        ),
+          // --- ヘッダー画像変更ボタン ---
+          Center(
+            child: CircleAvatar(
+              radius: 24,
+              backgroundColor: Colors.black.withOpacity(0.5),
+              child: const Icon(Icons.camera_alt, color: Colors.white, size: 28),
+            ),
+          ),
+          // --- プロフィール画像 ---
+          Positioned(
+            bottom: -45, // CircleAvatarの半径分だけ下にはみ出す
+            child: InkWell(
+              onTap: () => _showImageSourceActionSheet(context, ImageType.profile),
+              child: CircleAvatar(
+                radius: 50,
+                backgroundColor: Theme.of(context).scaffoldBackgroundColor, // 背景色で縁取り
+                child: CircleAvatar(
+                  radius: 46,
+                  backgroundColor: Colors.grey[200],
+                  backgroundImage: _profileImageFile != null
+                      ? FileImage(_profileImageFile!)
+                      : (_currentProfileImageUrl != null && _currentProfileImageUrl!.isNotEmpty
+                          ? NetworkImage(_currentProfileImageUrl!)
+                          : null) as ImageProvider?,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                       if (_profileImageFile == null && (_currentProfileImageUrl == null || _currentProfileImageUrl!.isEmpty))
+                          Icon(Icons.person, size: 50, color: Colors.grey[400]),
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Colors.black.withOpacity(0.5),
+                        child: const Icon(Icons.camera_alt, color: Colors.white, size: 20),
+                      ),
+                    ],
+                  )
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    int? maxLength,
+    int? maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        border: const OutlineInputBorder(),
+        counterText: "",
+        alignLabelWithHint: true,
+      ),
+      maxLength: maxLength,
+      maxLines: maxLines,
+      validator: validator,
+    );
+  }
+
+  Widget _buildDropdownField({
+    required String label,
+    required String? value,
+    required String hint,
+    required List<String> items,
+    required void Function(String?) onChanged,
+    String? Function(String?)? validator,
+  }) {
+    return DropdownButtonFormField<String>(
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      value: value,
+      hint: Text(hint),
+      items: items.map((label) => DropdownMenuItem(child: Text(label), value: label)).toList(),
+      onChanged: onChanged,
+      validator: validator,
+    );
+  }
+
+  Widget _buildDateField({
+    required String label,
+    required DateTime? value,
+    required VoidCallback onTap,
+    String? Function(DateTime?)? validator,
+  }) {
+     return FormField<DateTime>(
+      initialValue: value,
+      validator: (val) => validator?.call(value),
+      builder: (state) {
+        return InkWell(
+          onTap: onTap,
+          child: InputDecorator(
+            decoration: InputDecoration(
+              labelText: label,
+              border: const OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+              errorText: state.errorText,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: <Widget>[
+                Text(
+                  value != null ? DateFormat('y年M月d日').format(value) : '生年月日を選択',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: value == null ? Colors.grey[600] : Theme.of(context).textTheme.bodyLarge?.color,
+                  ),
+                ),
+                const Icon(Icons.calendar_today_outlined, color: Colors.grey),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
