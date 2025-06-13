@@ -93,7 +93,7 @@ class _MyPageScreenState extends State<MyPageScreen> {
                         fit: StackFit.expand,
                         children: [
                           Image.network(
-                            userProfile['headerImageUrl'] ?? 'https://images.unsplash.com/photo-1504805572947-34fad45aed93?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+                            userProfile['headerImageUrl'] ?? 'https://media.istockphoto.com/id/1391884768/ja/%E3%83%99%E3%82%AF%E3%82%BF%E3%83%BC/%E3%82%AA%E3%83%AB%E3%82%BF%E3%83%8A%E3%83%86%E3%82%A3%E3%83%96%E3%83%90%E3%83%B3%E3%83%89%E3%83%9F%E3%83%A5%E3%83%BC%E3%82%B8%E3%82%B7%E3%83%A3%E3%83%B3%E3%82%B3%E3%83%B3%E3%82%B5%E3%83%BC%E3%83%88%E3%81%A8%E7%BE%A4%E8%A1%86%E3%81%AE%E3%82%B7%E3%83%AB%E3%82%A8%E3%83%83%E3%83%88.jpg?s=612x612&w=0&k=20&c=ChiWOuYHqUg7kq3370VtJ5KezNrt7qmBU33ThXYoqtw=',
                             fit: BoxFit.cover,
                           ),
                           const DecoratedBox(

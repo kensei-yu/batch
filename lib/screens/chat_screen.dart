@@ -68,26 +68,31 @@ class _ChatScreenState extends State<ChatScreen> {
       final chatRoomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(chatRoomId);
       final messagesRef = chatRoomRef.collection('messages');
 
-      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-      // ★【エラー修正箇所 1/3】
-      // ★ 先にチャットルーム情報（参加者リストや最終メッセージ）を更新・作成する。
-      // ★ これにより、この後のメッセージ書き込み時に行われる権限チェックが成功する。
-      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-      await chatRoomRef.set({
+      // --- ▼▼▼ ここから修正 ▼▼▼ ---
+
+      // 1. WriteBatchを初期化
+      final batch = FirebaseFirestore.instance.batch();
+
+      // 2. チャットルームの作成/更新をバッチに追加
+      batch.set(chatRoomRef, {
         'userIds': [user.uid, widget.peerUser['uid']],
         'lastUpdatedAt': FieldValue.serverTimestamp(),
-        'lastMessage': messageText, // chat_list_screenで表示するための最終メッセージ
+        'lastMessage': messageText,
       }, SetOptions(merge: true));
 
-      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-      // ★【エラー修正箇所 2/3】
-      // ★ セキュリティルールに合わせてフィールド名を 'userId' から 'senderId' に変更。
-      // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-      await messagesRef.add({
-        'senderId': user.uid, // "userId"から"senderId"に変更
+      // 3. 新しいメッセージの作成をバッチに追加
+      // messagesRef.add() の代わりに、ドキュメント参照を先に作り batch.set() を使う
+      final newMessageRef = messagesRef.doc(); 
+      batch.set(newMessageRef, {
+        'senderId': user.uid,
         'message': messageText,
         'timestamp': FieldValue.serverTimestamp(),
       });
+
+      // 4. バッチ処理を一括で実行
+      await batch.commit();
+
+      // --- ▲▲▲ ここまで修正 ▲▲▲ ---
       
       _messageController.clear();
       
