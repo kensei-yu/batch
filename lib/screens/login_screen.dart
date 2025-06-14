@@ -70,8 +70,8 @@ class _LoginScreenState extends State<LoginScreen> {
       await FirebaseAuth.instance.signInWithCredential(credential);
 
       // ▼▼▼【修正点】Googleサインイン後の画面遷移命令を削除 ▼▼▼
-      // if (!mounted) return;
-      // Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
 
     } catch (e) {
       print("Error during Google Sign-In: $e");
