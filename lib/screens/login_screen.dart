@@ -1,5 +1,5 @@
 // lib/screens/login_screen.dart
-// このコードをファイル全体に貼り付けてください。
+// このコードでファイル全体を置き換えてください。
 
 import 'package:batch/screens/privacy_policy_screen.dart';
 import 'package:batch/screens/terms_screen.dart';
@@ -20,44 +20,64 @@ class _LoginScreenState extends State<LoginScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
   String? _errorMessage;
-
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  bool _isLoading = false;
 
   Future<void> _login() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
       final String email = _emailController.text.trim();
       final String password = _passwordController.text.trim();
 
-      await _auth.signInWithEmailAndPassword(email: email, password: password);
+      await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
 
-      // ▼▼▼【修正点】ログイン後の画面遷移命令を削除 ▼▼▼
-      // AuthGateが遷移をハンドルするため、ここでは不要です。
-      // if (!mounted) return;
-      // Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
-      
+      // ▼▼▼【修正点】ログイン成功後の画面遷移命令を追加し直す ▼▼▼
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      }
+
     } on FirebaseAuthException catch (e) {
-      setState(() {
-        if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
-          _errorMessage = 'メールアドレスまたはパスワードが間違っています。';
-        } else {
-          _errorMessage = 'エラーが発生しました: ${e.message}';
-        }
-      });
+      if (mounted) {
+        setState(() {
+          if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
+            _errorMessage = 'メールアドレスまたはパスワードが間違っています。';
+          } else {
+            _errorMessage = 'エラーが発生しました: ${e.message}';
+          }
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = '予期しないエラーが発生しました: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = '予期しないエラーが発生しました。';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _googleSignIn() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
       if (googleUser == null) {
-        print("Google Sign-In was canceled.");
-        return;
+        if (mounted) setState(() => _isLoading = false);
+        return; 
       }
 
       final GoogleSignInAuthentication googleAuth =
@@ -69,18 +89,31 @@ class _LoginScreenState extends State<LoginScreen> {
 
       await FirebaseAuth.instance.signInWithCredential(credential);
 
-      // ▼▼▼【修正点】Googleサインイン後の画面遷移命令を削除 ▼▼▼
-      if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
-
+      // ▼▼▼【修正点】Googleログイン成功後の画面遷移命令も追加 ▼▼▼
+      if (mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      }
+      
     } catch (e) {
-      print("Error during Google Sign-In: $e");
       if (mounted) {
         setState(() {
-          _errorMessage = 'Googleサインインに失敗しました: $e';
+          _errorMessage = 'Googleサインインに失敗しました。';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
         });
       }
     }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -96,12 +129,6 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'おかえりなさい',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 32),
                 if (_errorMessage != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16.0),
@@ -113,29 +140,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 TextFormField(
                   controller: _emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'メールアドレス',
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
+                  decoration: const InputDecoration(labelText: 'メールアドレス'),
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
-                    if (value == null || !value.contains('@')) {
-                      return '有効なメールアドレスを入力してください。';
+                    if (value == null || value.isEmpty || !value.contains('@')) {
+                      return '有効なメールアドレスを入力してください';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 16.0),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
                   decoration: InputDecoration(
                     labelText: 'パスワード',
-                    prefixIcon: const Icon(Icons.lock_outline),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
+                            ? Icons.visibility_off
+                            : Icons.visibility,
                       ),
                       onPressed: () {
                         setState(() {
@@ -146,28 +169,27 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   obscureText: _obscurePassword,
                   validator: (value) {
-                    if (value == null || value.length < 6) {
-                      return '6文字以上のパスワードを入力してください。';
+                    if (value == null || value.isEmpty) {
+                      return 'パスワードを入力してください';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 32.0),
-                ElevatedButton(
-                  onPressed: _login,
-                  child: const Text('ログイン'),
-                ),
+                const SizedBox(height: 24.0),
+                _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : ElevatedButton(
+                        onPressed: _login,
+                        child: const Text('ログイン'),
+                      ),
                 const SizedBox(height: 12.0),
-                ElevatedButton.icon(
-                  onPressed: _googleSignIn,
-                  icon: const Icon(Icons.login),
-                  label: const Text('Googleでログイン'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black54,
-                    side: BorderSide(color: Colors.grey.shade300)
-                  ),
-                ),
+                _isLoading
+                    ? const SizedBox.shrink()
+                    : ElevatedButton.icon(
+                        onPressed: _googleSignIn,
+                        icon: const Icon(Icons.login),
+                        label: const Text('Googleでログイン'),
+                      ),
                 const SizedBox(height: 24.0),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -180,7 +202,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       child: const Text('利用規約'),
                     ),
-                    const Text('|', style: TextStyle(color: Colors.grey)),
+                    const Text('|'),
                     TextButton(
                       onPressed: () => Navigator.push(
                         context,

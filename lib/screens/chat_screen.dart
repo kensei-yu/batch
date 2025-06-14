@@ -1,9 +1,9 @@
 // lib/screens/chat_screen.dart
-// このコードでファイル全体を貼り付けてください。
+// このコードでファイル全体を置き換えてください。
 
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 class ChatScreen extends StatefulWidget {
   final Map<String, dynamic> peerUser;
@@ -44,9 +44,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _resetUnreadCount() {
     if (chatRoomId == null || _currentUser == null) return;
-    FirebaseFirestore.instance.collection('chat_rooms').doc(chatRoomId).set({
-      'unreadCount_${_currentUser!.uid}': 0,
-    }, SetOptions(merge: true));
+    // ドキュメントが存在する場合のみ更新する
+    FirebaseFirestore.instance.collection('chat_rooms').doc(chatRoomId).get().then((doc) {
+      if (doc.exists) {
+        doc.reference.update({'unreadCount_${_currentUser!.uid}': 0});
+      }
+    });
   }
 
   Future<void> _sendMessage() async {
@@ -58,37 +61,26 @@ class _ChatScreenState extends State<ChatScreen> {
     final myId = _currentUser!.uid;
     final recipientId = widget.peerUser['uid'];
     final chatRoomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(chatRoomId!);
+    final newMessageRef = chatRoomRef.collection('messages').doc();
+
+    final chatRoomData = {
+      'userIds': [myId, recipientId],
+      'lastUpdatedAt': FieldValue.serverTimestamp(),
+      'lastMessage': messageText,
+      'unreadCount_$recipientId': FieldValue.increment(1),
+    };
+
+    final messageData = {
+      'senderId': myId,
+      'message': messageText,
+      'timestamp': FieldValue.serverTimestamp(),
+    };
 
     try {
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        DocumentSnapshot chatDoc = await transaction.get(chatRoomRef);
-        int newUnreadCount = 1;
-
-        if (chatDoc.exists) {
-          final data = chatDoc.data() as Map<String, dynamic>;
-          newUnreadCount = (data['unreadCount_$recipientId'] as num? ?? 0).toInt() + 1;
-          transaction.update(chatRoomRef, {
-            'lastUpdatedAt': FieldValue.serverTimestamp(),
-            'lastMessage': messageText,
-            'unreadCount_$recipientId': newUnreadCount,
-            'unreadCount_$myId': 0,
-          });
-        } else {
-          transaction.set(chatRoomRef, {
-            'userIds': [myId, recipientId],
-            'lastUpdatedAt': FieldValue.serverTimestamp(),
-            'lastMessage': messageText,
-            'unreadCount_$recipientId': newUnreadCount,
-            'unreadCount_$myId': 0,
-          });
-        }
-        final messagesRef = chatRoomRef.collection('messages').doc();
-        transaction.set(messagesRef, {
-          'senderId': myId,
-          'message': messageText,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-      });
+      final batch = FirebaseFirestore.instance.batch();
+      batch.set(chatRoomRef, chatRoomData, SetOptions(merge: true));
+      batch.set(newMessageRef, messageData);
+      await batch.commit();
 
       _messageController.clear();
       if (_scrollController.hasClients) {
@@ -118,18 +110,9 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Wrap(
                 alignment: WrapAlignment.spaceAround,
                 children: [
-                  _buildMenuOption(icon: Icons.photo_outlined, label: '画像', onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('画像送信は準備中です')));
-                  }),
-                  _buildMenuOption(icon: Icons.videocam_outlined, label: '動画', onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('動画送信は準備中です')));
-                  }),
-                  _buildMenuOption(icon: Icons.mic_none, label: '音声', onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ボイスメッセージは準備中です')));
-                  }),
+                  _buildMenuOption(icon: Icons.photo_outlined, label: '画像', onTap: () { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('画像送信は準備中です'))); }),
+                  _buildMenuOption(icon: Icons.videocam_outlined, label: '動画', onTap: () { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('動画送信は準備中です'))); }),
+                  _buildMenuOption(icon: Icons.mic_none, label: '音声', onTap: () { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ボイスメッセージは準備中です'))); }),
                 ],
               ),
             ),
@@ -211,55 +194,55 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildMessageInputField() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        border: Border(top: BorderSide(color: Colors.grey.shade200))
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.add_circle_outline),
-              color: Colors.grey.shade600,
-              onPressed: _showAttachmentMenu,
-            ),
-            Expanded(
-              child: TextField(
-                controller: _messageController,
-                maxLines: 5,
-                minLines: 1,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  hintText: 'メッセージを入力...',
-                  filled: true,
-                  fillColor: Colors.grey[200],
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
-                ),
-                onChanged: (text) => setState(() {}),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          border: Border(top: BorderSide(color: Colors.grey.shade200))
+        ),
+        child: SafeArea(
+          top: false,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                color: Colors.grey.shade600,
+                onPressed: _showAttachmentMenu,
               ),
-            ),
-            const SizedBox(width: 8),
-            _isSending
-              ? const Padding(padding: EdgeInsets.all(12.0), child: SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)))
-              : IconButton(
-                  icon: const Icon(Icons.send_rounded),
-                  color: Theme.of(context).colorScheme.primary,
-                  onPressed: _messageController.text.trim().isNotEmpty ? _sendMessage : null,
+              Expanded(
+                child: TextField(
+                  controller: _messageController,
+                  maxLines: 5,
+                  minLines: 1,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    hintText: 'メッセージを入力...',
+                    filled: true,
+                    fillColor: Colors.grey[200],
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                  ),
+                  onChanged: (text) => setState(() {}),
                 ),
-          ],
+              ),
+              IconButton(
+                icon: Icon(Icons.send_rounded, color: Theme.of(context).colorScheme.primary),
+                onPressed: _messageController.text.trim().isNotEmpty ? _sendMessage : null,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
+// ▼▼▼【修正】MessageBubbleウィジェットをこのファイル内にプライベートクラスとして配置 ▼▼▼
 class _MessageBubble extends StatelessWidget {
   final String message;
   final bool isMe;

@@ -25,31 +25,6 @@ class WelcomeScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Spacer(flex: 2),
-                // ロゴやタイトル
-                Image.asset(
-                  'assets/ikon.PNG', // 画像が見つからない場合はプロジェクトに追加してください
-                  height: 120,
-                  errorBuilder: (context, error, stackTrace) => const Icon(Icons.music_note, size: 120, color: Colors.white),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'BATCH',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  '音楽で、最高の仲間と繋がろう。',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white70,
-                  ),
-                ),
                 const Spacer(flex: 3),
                 SizedBox(
                   width: double.infinity,
