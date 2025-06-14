@@ -1,4 +1,5 @@
 // lib/screens/post_screen.dart
+// このコードをファイル全体に貼り付けてください。
 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,16 +24,11 @@ class _PostScreenState extends State<PostScreen> {
       return;
     }
 
-    setState(() {
-      _isPosting = true;
-    });
+    setState(() { _isPosting = true; });
 
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-       setState(() {
-        _isPosting = false;
-      });
-      // エラー処理: ユーザーがログインしていない
+       setState(() { _isPosting = false; });
       return;
     }
 
@@ -41,13 +37,13 @@ class _PostScreenState extends State<PostScreen> {
         'userId': user.uid,
         'content': _postController.text.trim(),
         'timestamp': FieldValue.serverTimestamp(),
-        'likeCount': 0, // この行を修正（追加）
-        // 'userName': user.displayName, // 必要であればユーザー名も保存
-        // 'userImage': user.photoURL,   // 必要であればユーザー画像URLも保存
+        'likeCount': 0,
+        'commentCount': 0,
       });
 
       if (mounted) {
-        Navigator.of(context).pop(true); // trueを返して成功を通知
+        // 投稿成功後、結果(true)を返して画面を閉じる
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
@@ -56,62 +52,62 @@ class _PostScreenState extends State<PostScreen> {
         );
       }
     } finally {
-      if(mounted){
-        setState(() {
-          _isPosting = false;
-        });
-      }
+      if(mounted) setState(() { _isPosting = false; });
     }
+  }
+  
+  @override
+  void dispose() {
+    _postController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // MediaQueryを使用して画面の高さを取得し、モーダルの高さを調整
-    final mediaQuery = MediaQuery.of(context);
-    return Padding(
-      // viewInsets.bottom はキーボードの高さを考慮
-      padding: EdgeInsets.only(bottom: mediaQuery.viewInsets.bottom),
-      child: Container(
-        height: mediaQuery.size.height * 0.5, //画面の50%程度の高さ
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, // コンテンツに合わせて高さを調整
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: _isPosting ? null : () { // 投稿中は無効化
-                    Navigator.of(context).pop();
-                  },
-                ),
-                ElevatedButton(
-                  onPressed: _isPosting ? null : _submitPost, // 投稿中は無効化
-                  child: _isPosting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('投稿'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10), // 少し間隔を調整
-            Expanded( // TextFieldが利用可能なスペースを全て使うようにする
-              child: TextField(
-                controller: _postController,
-                maxLines: null, // 自動で複数行になるように
-                expands: true, // 利用可能なスペースいっぱいに広がる
-                textAlignVertical: TextAlignVertical.top, // テキストを上寄せに
-                decoration: const InputDecoration(
-                  hintText: 'メンバーを募集しよう',
-                  border: InputBorder.none,
-                ),
+    // ▼▼▼【レイアウトをScaffoldに変更】▼▼▼
+    return Scaffold(
+      appBar: AppBar(
+        // 左側に閉じるボタン
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: _isPosting ? null : () => Navigator.of(context).pop(),
+        ),
+        title: const Text('新規投稿'),
+        // 右側に投稿ボタン
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 8.0),
+            child: ElevatedButton(
+              onPressed: _isPosting ? null : _submitPost,
+              style: ElevatedButton.styleFrom(
+                elevation: 0,
+                // テキストボタン風の見た目にする
+                backgroundColor: Theme.of(context).colorScheme.primary,
+                foregroundColor: Colors.white,
               ),
+              child: _isPosting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('投稿する'),
             ),
-          ],
+          ),
+        ],
+      ),
+      body: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        child: TextField(
+          controller: _postController,
+          autofocus: true, // 画面を開いたら自動でフォーカスする
+          maxLines: null, // 複数行の入力を可能にする
+          expands: true, // 利用可能なスペースいっぱいに広がる
+          textAlignVertical: TextAlignVertical.top,
+          decoration: const InputDecoration(
+            hintText: '音楽の輪を広げよう',
+            border: InputBorder.none, // 枠線をなくす
+            filled: false, // 背景色をなくす
+          ),
         ),
       ),
     );

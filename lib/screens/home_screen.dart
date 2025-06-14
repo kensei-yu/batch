@@ -1,4 +1,5 @@
 // lib/screens/home_screen.dart
+// このコードをファイル全体に貼り付けてください。
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,7 +8,7 @@ import 'timeline_screen.dart';
 import 'my_page_screen.dart';
 import 'post_screen.dart';
 import 'chat_list_screen.dart';
-import 'matching_screen.dart'; 
+import 'matching_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -20,12 +21,11 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final _currentUser = FirebaseAuth.instance.currentUser;
 
-  // ▼▼▼【ここが修正点です】▼▼▼
-  final List<Widget> _pages = [
-    const TimelineScreen(),
-    const MatchingScreen(),
-    const ChatListScreen(), // const を削除しました
-    const MyPageScreen(),
+  static const List<Widget> _pages = [
+    TimelineScreen(),
+    MatchingScreen(),
+    ChatListScreen(),
+    MyPageScreen(),
   ];
 
   void _onItemTapped(int index) {
@@ -34,13 +34,18 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // ▼▼▼【ここを修正】投稿画面をフルスクリーンで表示する ▼▼▼
   void _showPostScreen(BuildContext context) async {
-    final result = await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => const PostScreen(),
+    // Navigator.push を使って全画面表示し、結果を受け取る
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const PostScreen(),
+        fullscreenDialog: true, // 下からスライドインするアニメーション
+      ),
     );
 
+    // 投稿が成功した場合（result == true）にスナックバーを表示
     if (result == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('投稿しました！')),
@@ -49,21 +54,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
   
   Widget _buildChatIconWithBadge(bool isActive) {
+    final iconColor = isActive ? Theme.of(context).bottomNavigationBarTheme.selectedItemColor : Theme.of(context).bottomNavigationBarTheme.unselectedItemColor;
+
+    if (_currentUser == null) {
+      return Icon(isActive ? Icons.chat_bubble : Icons.chat_bubble_outline, color: iconColor);
+    }
+    
     return StreamBuilder<QuerySnapshot>(
-      stream: _currentUser != null
-          ? FirebaseFirestore.instance
+      stream: FirebaseFirestore.instance
               .collection('chat_rooms')
               .where('userIds', arrayContains: _currentUser!.uid)
-              .snapshots()
-          : null,
+              .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.hasError) {
-          return Icon(isActive ? Icons.chat_bubble : Icons.chat_bubble_outline);
+          return Icon(isActive ? Icons.chat_bubble : Icons.chat_bubble_outline, color: iconColor);
         }
 
         int totalUnreadCount = 0;
         for (var doc in snapshot.data!.docs) {
-          dynamic unreadData = (doc.data() as Map<String, dynamic>)['unreadCount_${_currentUser!.uid}'];
+          final data = doc.data() as Map<String, dynamic>;
+          final unreadData = data['unreadCount_${_currentUser!.uid}'];
           if (unreadData is num) {
             totalUnreadCount += unreadData.toInt();
           }
@@ -72,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return Badge(
           label: Text('$totalUnreadCount'),
           isLabelVisible: totalUnreadCount > 0,
-          child: Icon(isActive ? Icons.chat_bubble : Icons.chat_bubble_outline),
+          child: Icon(isActive ? Icons.chat_bubble : Icons.chat_bubble_outline, color: iconColor),
         );
       },
     );
@@ -81,23 +91,17 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // _selectedIndexに応じて表示するページを切り替え
-          _pages[_selectedIndex],
-          if (_selectedIndex == 0)
-            Positioned(
-              bottom: 20,
-              right: 16,
-              child: FloatingActionButton(
-                onPressed: () => _showPostScreen(context),
-                child: const Icon(Icons.add),
-              ),
-            ),
-        ],
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
       ),
+      floatingActionButton: _selectedIndex == 0
+          ? FloatingActionButton(
+              onPressed: () => _showPostScreen(context),
+              child: const Icon(Icons.add),
+            )
+          : null,
       bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         items: [

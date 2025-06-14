@@ -49,5 +49,11 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSBonjourServices</key>
+    <array>
+        <string>_dartobservatory._tcp</string> 
+    </array>
+    <key>NSLocalNetworkUsageDescription</key>
+        <string>デバッグ機能（ホットリロードなど）を有効にするためにローカルネットワークを使用します。この機能は開発中にのみ使用されます。</string>
 </dict>
 </plist>

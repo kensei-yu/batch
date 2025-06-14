@@ -1,9 +1,11 @@
-import 'package:flutter/material.dart';
+// lib/screens/login_screen.dart
+// このコードをファイル全体に貼り付けてください。
+
+import 'package:batch/screens/privacy_policy_screen.dart';
+import 'package:batch/screens/terms_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'home_screen.dart';
-import 'terms_screen.dart';
-import 'privacy_policy_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -28,17 +30,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
       await _auth.signInWithEmailAndPassword(email: email, password: password);
 
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
+      // ▼▼▼【修正点】ログイン後の画面遷移命令を削除 ▼▼▼
+      // AuthGateが遷移をハンドルするため、ここでは不要です。
+      // if (!mounted) return;
+      // Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      
     } on FirebaseAuthException catch (e) {
       setState(() {
-        if (e.code == 'user-not-found') {
-          _errorMessage = 'ユーザーが見つかりませんでした。';
-        } else if (e.code == 'wrong-password') {
-          _errorMessage = 'パスワードが間違っています。';
+        if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
+          _errorMessage = 'メールアドレスまたはパスワードが間違っています。';
         } else {
           _errorMessage = 'エラーが発生しました: ${e.message}';
         }
@@ -67,22 +67,15 @@ class _LoginScreenState extends State<LoginScreen> {
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+      await FirebaseAuth.instance.signInWithCredential(credential);
 
-      print("Google Sign-In successful!");
-      print("User: ${userCredential.user?.displayName}");
-
-      if (!mounted) return;
-      // Googleサインイン後もHomeScreenへ遷移
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomeScreen()),
-      );
+      // ▼▼▼【修正点】Googleサインイン後の画面遷移命令を削除 ▼▼▼
+      // if (!mounted) return;
+      // Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
 
     } catch (e) {
       print("Error during Google Sign-In: $e");
-      if(mounted){
+      if (mounted) {
         setState(() {
           _errorMessage = 'Googleサインインに失敗しました: $e';
         });
@@ -94,75 +87,112 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('ログイン')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.red),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'おかえりなさい',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 32),
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'メールアドレス',
+                    prefixIcon: Icon(Icons.email_outlined),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || !value.contains('@')) {
+                      return '有効なメールアドレスを入力してください。';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16.0),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: InputDecoration(
+                    labelText: 'パスワード',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
+                    ),
+                  ),
+                  obscureText: _obscurePassword,
+                  validator: (value) {
+                    if (value == null || value.length < 6) {
+                      return '6文字以上のパスワードを入力してください。';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 32.0),
+                ElevatedButton(
+                  onPressed: _login,
+                  child: const Text('ログイン'),
+                ),
+                const SizedBox(height: 12.0),
+                ElevatedButton.icon(
+                  onPressed: _googleSignIn,
+                  icon: const Icon(Icons.login),
+                  label: const Text('Googleでログイン'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black54,
+                    side: BorderSide(color: Colors.grey.shade300)
                   ),
                 ),
-              TextField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: 'メールアドレス'),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              TextField(
-                controller: _passwordController,
-                decoration: InputDecoration(
-                  labelText: 'パスワード',
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                const SizedBox(height: 24.0),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const TermsScreen()),
+                      ),
+                      child: const Text('利用規約'),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        _obscurePassword = !_obscurePassword;
-                      });
-                    },
-                  ),
+                    const Text('|', style: TextStyle(color: Colors.grey)),
+                    TextButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const PrivacyPolicyScreen()),
+                      ),
+                      child: const Text('プライバシーポリシー'),
+                    ),
+                  ],
                 ),
-                obscureText: _obscurePassword,
-              ),
-              const SizedBox(height: 16.0),
-              ElevatedButton(
-                onPressed: _login,
-                child: const Text('ログイン'),
-              ),
-              ElevatedButton.icon(
-                onPressed: _googleSignIn,
-                icon: const Icon(Icons.login), // Consider using a Google icon
-                label: const Text('Googleでログイン'),
-              ),
-              const Spacer(),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const TermsScreen()),
-                    ),
-                    child: const Text('利用規約'),
-                  ),
-                  const Text('|'),
-                  TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const PrivacyPolicyScreen()),
-                    ),
-                    child: const Text('プライバシーポリシー'),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

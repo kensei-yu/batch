@@ -1,9 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+// lib/screens/timeline_screen.dart
+// このコードでファイル全体を置き換えてください。
+
+import 'package:batch/screens/notification_screen.dart';
+import 'package:batch/screens/post_detail_screen.dart';
+import 'package:batch/screens/settings_screen.dart';
+import 'package:batch/screens/user_profile_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'user_profile_screen.dart';
-import 'post_detail_screen.dart';
-import 'notification_screen.dart'; // 通知画面をインポート
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 
 class TimelineScreen extends StatefulWidget {
   const TimelineScreen({Key? key}) : super(key: key);
@@ -15,15 +19,20 @@ class TimelineScreen extends StatefulWidget {
 class _TimelineScreenState extends State<TimelineScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser;
 
+  // ... (投稿削除、いいねのロジックは変更なし)
   Future<void> _deletePost(BuildContext context, String postId) async {
-    bool? confirmDelete = await showDialog<bool>(
+    final confirmDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("投稿を削除"),
         content: const Text("この投稿を削除してもよろしいですか？"),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("キャンセル")),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("削除", style: TextStyle(color: Colors.red))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text("キャンセル")),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text("削除", style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -31,13 +40,13 @@ class _TimelineScreenState extends State<TimelineScreen> {
     if (confirmDelete == true) {
       try {
         await FirebaseFirestore.instance.collection('posts').doc(postId).delete();
-        if(context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('投稿を削除しました。')),
           );
         }
       } catch (e) {
-        if(context.mounted) {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('投稿の削除に失敗しました: $e')),
           );
@@ -49,8 +58,12 @@ class _TimelineScreenState extends State<TimelineScreen> {
   Future<void> _toggleLike(String postId, String postAuthorId) async {
     if (_currentUser == null) return;
     final currentUserId = _currentUser!.uid;
-    
-    final likeRef = FirebaseFirestore.instance.collection('users').doc(currentUserId).collection('liked_posts').doc(postId);
+
+    final likeRef = FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUserId)
+        .collection('liked_posts')
+        .doc(postId);
     final postRef = FirebaseFirestore.instance.collection('posts').doc(postId);
 
     final doc = await likeRef.get();
@@ -62,16 +75,18 @@ class _TimelineScreenState extends State<TimelineScreen> {
       likeRef.set({'timestamp': FieldValue.serverTimestamp()});
       postRef.update({'likeCount': FieldValue.increment(1)});
 
-      // 自分の投稿でなければ通知を作成
       if (currentUserId != postAuthorId) {
         final notificationRef = FirebaseFirestore.instance
             .collection('users')
-            .doc(postAuthorId) // 投稿者のID
+            .doc(postAuthorId)
             .collection('notifications')
-            .doc(); // 新しいドキュメントIDを自動生成
-
-        final currentUserDoc = await FirebaseFirestore.instance.collection('users').doc(currentUserId).get();
-        final currentUserNickname = currentUserDoc.data()?['nickname'] ?? '誰か';
+            .doc();
+        final currentUserDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUserId)
+            .get();
+        final currentUserNickname =
+            currentUserDoc.data()?['nickname'] ?? '誰か';
 
         await notificationRef.set({
           'id': notificationRef.id,
@@ -90,8 +105,13 @@ class _TimelineScreenState extends State<TimelineScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: () {
+            Navigator.pushNamed(context, '/settings');
+          },
+        ),
         title: const Text('BATCH'),
-        automaticallyImplyLeading: false,
         actions: [
           _buildNotificationButton(context),
         ],
@@ -115,120 +135,19 @@ class _TimelineScreenState extends State<TimelineScreen> {
           final posts = snapshot.data!.docs;
 
           return ListView.builder(
+            padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
             itemCount: posts.length,
             itemBuilder: (context, index) {
               final post = posts[index];
               final data = post.data() as Map<String, dynamic>;
-              final postId = post.id;
-              
-              final dynamic postUserIdValue = data['userId'];
+              final postUserId = data['userId'] ?? '';
 
-              if (postUserIdValue == null || postUserIdValue is! String) {
-                return const SizedBox.shrink();
-              }
-              
-              final String postUserId = postUserIdValue;
-              final bool isOwner = _currentUser?.uid == postUserId;
-              final int likeCount = data['likeCount'] ?? 0;
-              final int commentCount = data['commentCount'] ?? 0;
+              if (postUserId.isEmpty) return const SizedBox.shrink();
 
-              return FutureBuilder<DocumentSnapshot>(
-                future: FirebaseFirestore.instance.collection('users').doc(postUserId).get(),
-                builder: (context, userSnapshot) {
-                  if (!userSnapshot.hasData) {
-                    return const Card(child: ListTile(title: Text("読み込み中...")));
-                  }
-                  
-                  final userInfo = userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
-                  final displayName = userInfo['nickname'] ?? 'ゲストユーザー';
-                  final String? imageUrl = userInfo['imageUrl'];
-
-                  return Card(
-                    elevation: 2.0,
-                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(context, MaterialPageRoute(
-                                builder: (context) => UserProfileScreen(userId: postUserId),
-                              ));
-                            },
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 22,
-                                  backgroundImage: (imageUrl != null && imageUrl.isNotEmpty) ? NetworkImage(imageUrl) : null,
-                                  child: (imageUrl == null || imageUrl.isEmpty) ? const Icon(Icons.person, size: 22) : null,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(displayName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                      if(data['timestamp'] != null)
-                                        Text(
-                                          (data['timestamp'] as Timestamp).toDate().toLocal().toString().substring(0, 16),
-                                          style: const TextStyle(color: Colors.grey, fontSize: 12),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                if (isOwner)
-                                  IconButton(
-                                    icon: const Icon(Icons.more_horiz),
-                                    onPressed: () => _deletePost(context, postId),
-                                  )
-                              ],
-                            ),
-                          ),
-                          const Divider(height: 24),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 8.0),
-                            child: Text(data['content'] ?? '', style: const TextStyle(fontSize: 15, height: 1.4)),
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              StreamBuilder<DocumentSnapshot>(
-                                stream: _currentUser != null ? FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).collection('liked_posts').doc(postId).snapshots() : null,
-                                builder: (context, likeSnapshot) {
-                                  final bool isLiked = likeSnapshot.hasData && likeSnapshot.data!.exists;
-                                  return IconButton(
-                                    icon: Icon(
-                                      isLiked ? Icons.favorite : Icons.favorite_border,
-                                      color: isLiked ? Colors.red : Colors.grey,
-                                    ),
-                                    onPressed: () => _toggleLike(postId, postUserId),
-                                  );
-                                },
-                              ),
-                              Text('$likeCount', style: const TextStyle(color: Colors.grey, fontSize: 14)),
-                              const SizedBox(width: 16),
-                              IconButton(
-                                icon: const Icon(Icons.chat_bubble_outline, color: Colors.grey),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => PostDetailScreen(postId: postId),
-                                    ),
-                                  );
-                                },
-                              ),
-                              Text('$commentCount', style: const TextStyle(color: Colors.grey, fontSize: 14)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+              return _PostCard(
+                post: post,
+                onDelete: () => _deletePost(context, post.id),
+                onToggleLike: () => _toggleLike(post.id, postUserId),
               );
             },
           );
@@ -250,45 +169,179 @@ class _TimelineScreenState extends State<TimelineScreen> {
       builder: (context, snapshot) {
         final unreadCount = snapshot.hasData ? snapshot.data!.docs.length : 0;
 
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.notifications_outlined),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const NotificationScreen()),
-                );
-              },
-            ),
-            if (unreadCount > 0)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 16,
-                    minHeight: 16,
-                  ),
-                  child: Text(
-                    '$unreadCount',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              ),
-          ],
+        return IconButton(
+          icon: Badge(
+            label: Text('$unreadCount'),
+            isLabelVisible: unreadCount > 0,
+            child: const Icon(Icons.notifications_outlined),
+          ),
+          onPressed: () => Navigator.push(context,
+              MaterialPageRoute(builder: (context) => const NotificationScreen())),
         );
       },
+    );
+  }
+}
+
+class _PostCard extends StatelessWidget {
+  final DocumentSnapshot post;
+  final VoidCallback onDelete;
+  final VoidCallback onToggleLike;
+
+  const _PostCard({
+    Key? key,
+    required this.post,
+    required this.onDelete,
+    required this.onToggleLike,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final data = post.data() as Map<String, dynamic>;
+    final postId = post.id;
+    final postUserId = data['userId'];
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final bool isOwner = currentUser?.uid == postUserId;
+
+    return FutureBuilder<DocumentSnapshot>(
+      future:
+          FirebaseFirestore.instance.collection('users').doc(postUserId).get(),
+      builder: (context, userSnapshot) {
+        if (!userSnapshot.hasData) {
+          return Card(
+              child: Container(height: 150, color: Colors.grey[200]));
+        }
+
+        final userInfo =
+            userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
+        final displayName = userInfo['nickname'] ?? 'ゲストユーザー';
+        final String? imageUrl = userInfo['imageUrl'];
+        final String userHandle = '@${userInfo['username'] ?? 'no_id'}';
+
+        return Card(
+          child: InkWell(
+            onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (context) => PostDetailScreen(postId: postId))),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    UserProfileScreen(userId: postUserId))),
+                        child: CircleAvatar(
+                          radius: 24,
+                          backgroundImage: (imageUrl != null &&
+                                  imageUrl.isNotEmpty)
+                              ? NetworkImage(imageUrl)
+                              : null,
+                          child: (imageUrl == null || imageUrl.isEmpty)
+                              ? const Icon(Icons.person, size: 24)
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(displayName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text(userHandle,
+                                style: const TextStyle(
+                                    color: Colors.grey, fontSize: 14)),
+                          ],
+                        ),
+                      ),
+                      if (isOwner)
+                        IconButton(
+                            icon: const Icon(Icons.more_horiz),
+                            onPressed: onDelete)
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(data['content'] ?? '',
+                      style: const TextStyle(fontSize: 15, height: 1.5)),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildActionButton(context,
+                          icon: Icons.chat_bubble_outline,
+                          count: data['commentCount'] ?? 0,
+                          onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) =>
+                                      PostDetailScreen(postId: postId)))),
+                      const SizedBox(width: 24),
+                      StreamBuilder<DocumentSnapshot>(
+                        stream: currentUser != null
+                            ? FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(currentUser.uid)
+                                .collection('liked_posts')
+                                .doc(postId)
+                                .snapshots()
+                            : null,
+                        builder: (context, likeSnapshot) {
+                          final isLiked =
+                              likeSnapshot.hasData && likeSnapshot.data!.exists;
+                          return _buildActionButton(context,
+                              icon: isLiked
+                                  ? Icons.favorite
+                                  : Icons.favorite_border,
+                              // ▼▼▼【ここを修正】テーマカラーを使う ▼▼▼
+                              color: isLiked
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.grey,
+                              count: data['likeCount'] ?? 0,
+                              onPressed: onToggleLike);
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActionButton(BuildContext context,
+      {required IconData icon,
+      Color? color,
+      required int count,
+      required VoidCallback onPressed}) {
+    return InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(20),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+        child: Row(
+          children: [
+            Icon(icon, color: color ?? Colors.grey, size: 22),
+            const SizedBox(width: 8),
+            Text('$count',
+                style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
     );
   }
 }
