@@ -34,18 +34,15 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // ▼▼▼【ここを修正】投稿画面をフルスクリーンで表示する ▼▼▼
   void _showPostScreen(BuildContext context) async {
-    // Navigator.push を使って全画面表示し、結果を受け取る
     final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (context) => const PostScreen(),
-        fullscreenDialog: true, // 下からスライドインするアニメーション
+        fullscreenDialog: true,
       ),
     );
 
-    // 投稿が成功した場合（result == true）にスナックバーを表示
     if (result == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('投稿しました！')),
@@ -53,13 +50,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
   
+  // ▼▼▼【ここから修正】▼▼▼
+  // チャットアイコンに未読数バッジを付けるためのウィジェット
   Widget _buildChatIconWithBadge(bool isActive) {
-    final iconColor = isActive ? Theme.of(context).bottomNavigationBarTheme.selectedItemColor : Theme.of(context).bottomNavigationBarTheme.unselectedItemColor;
+    // アイコンの色をアクティブかどうかで決定
+    final iconColor = isActive 
+        ? Theme.of(context).bottomNavigationBarTheme.selectedItemColor 
+        : Theme.of(context).bottomNavigationBarTheme.unselectedItemColor;
 
+    // ログインしていない場合はバッジを表示しない
     if (_currentUser == null) {
       return Icon(isActive ? Icons.chat_bubble : Icons.chat_bubble_outline, color: iconColor);
     }
     
+    // 全てのチャットルームの自分の未読数を合計して表示
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
               .collection('chat_rooms')
@@ -67,21 +71,25 @@ class _HomeScreenState extends State<HomeScreen> {
               .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.hasError) {
+          // データがない場合は通常のアイコンを表示
           return Icon(isActive ? Icons.chat_bubble : Icons.chat_bubble_outline, color: iconColor);
         }
 
         int totalUnreadCount = 0;
+        // 全てのチャットルームをループして未読数を合計
         for (var doc in snapshot.data!.docs) {
           final data = doc.data() as Map<String, dynamic>;
+          // 自分の未読数を取得して加算
           final unreadData = data['unreadCount_${_currentUser!.uid}'];
           if (unreadData is num) {
             totalUnreadCount += unreadData.toInt();
           }
         }
 
+        // Badgeウィジェットでアイコンと未読数を表示
         return Badge(
           label: Text('$totalUnreadCount'),
-          isLabelVisible: totalUnreadCount > 0,
+          isLabelVisible: totalUnreadCount > 0, // 未読数が0より大きい場合のみバッジを表示
           child: Icon(isActive ? Icons.chat_bubble : Icons.chat_bubble_outline, color: iconColor),
         );
       },
@@ -107,9 +115,10 @@ class _HomeScreenState extends State<HomeScreen> {
         items: [
           const BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: 'ホーム'),
           const BottomNavigationBarItem(icon: Icon(Icons.swipe_outlined), activeIcon: Icon(Icons.swipe), label: '探す'),
+          // チャットタブのアイコンをバッジ付きのものに差し替え
           BottomNavigationBarItem(
-            icon: _buildChatIconWithBadge(false),
-            activeIcon: _buildChatIconWithBadge(true),
+            icon: _buildChatIconWithBadge(false), // 非アクティブ時のアイコン
+            activeIcon: _buildChatIconWithBadge(true), // アクティブ時のアイコン
             label: 'メッセージ',
           ),
           const BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: 'マイページ'),
@@ -117,4 +126,5 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+  // ▲▲▲【ここまで修正】▲▲▲
 }

@@ -25,7 +25,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _createChatRoomId();
-    _resetUnreadCount();
+    _resetUnreadCount(); // 画面を開いたら未読数をリセット
   }
   
   @override
@@ -42,6 +42,8 @@ class _ChatScreenState extends State<ChatScreen> {
     chatRoomId = currentUserId.compareTo(peerUserId) > 0 ? '$currentUserId\_$peerUserId' : '$peerUserId\_$currentUserId';
   }
 
+  // ▼▼▼【ここから修正】▼▼▼
+  // このチャットルームの自分の未読数を0にする
   void _resetUnreadCount() {
     if (chatRoomId == null || _currentUser == null) return;
     // ドキュメントが存在する場合のみ更新する
@@ -63,13 +65,16 @@ class _ChatScreenState extends State<ChatScreen> {
     final chatRoomRef = FirebaseFirestore.instance.collection('chat_rooms').doc(chatRoomId!);
     final newMessageRef = chatRoomRef.collection('messages').doc();
 
+    // チャットルームの情報を更新
+    // 相手の未読数を1増やす
     final chatRoomData = {
       'userIds': [myId, recipientId],
       'lastUpdatedAt': FieldValue.serverTimestamp(),
       'lastMessage': messageText,
-      'unreadCount_$recipientId': FieldValue.increment(1),
+      'unreadCount_$recipientId': FieldValue.increment(1), // 相手の未読数をインクリメント
     };
 
+    // 新しいメッセージのデータ
     final messageData = {
       'senderId': myId,
       'message': messageText,
@@ -77,8 +82,9 @@ class _ChatScreenState extends State<ChatScreen> {
     };
 
     try {
+      // バッチ処理で複数の書き込みを一度に実行
       final batch = FirebaseFirestore.instance.batch();
-      batch.set(chatRoomRef, chatRoomData, SetOptions(merge: true));
+      batch.set(chatRoomRef, chatRoomData, SetOptions(merge: true)); // merge:trueで既存フィールドを上書きしない
       batch.set(newMessageRef, messageData);
       await batch.commit();
 
@@ -92,6 +98,7 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) setState(() { _isSending = false; });
     }
   }
+  // ▲▲▲【ここまで修正】▲▲▲
 
   void _showAttachmentMenu() {
     showModalBottomSheet(
@@ -232,7 +239,7 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               IconButton(
                 icon: Icon(Icons.send_rounded, color: Theme.of(context).colorScheme.primary),
-                onPressed: _messageController.text.trim().isNotEmpty ? _sendMessage : null,
+                onPressed: _isSending || _messageController.text.trim().isEmpty ? null : _sendMessage,
               ),
             ],
           ),
@@ -242,7 +249,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// ▼▼▼【修正】MessageBubbleウィジェットをこのファイル内にプライベートクラスとして配置 ▼▼▼
 class _MessageBubble extends StatelessWidget {
   final String message;
   final bool isMe;
