@@ -1,3 +1,5 @@
+// lib/screens/user_profile_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -23,7 +25,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
 
   Future<void> _toggleFollow() async {
     if (_currentUser == null) return;
-    final currentUserId = _currentUser.uid;
+    final currentUserId = _currentUser!.uid;
     final targetUserId = widget.userId;
 
     final followingRef = FirebaseFirestore.instance.collection('users').doc(currentUserId).collection('following').doc(targetUserId);
@@ -59,9 +61,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         }
         
         final userProfile = snapshot.data!;
+        final headerImageUrl = userProfile['headerImageUrl'] as String?;
+        final profileImageUrl = userProfile['imageUrl'] as String?;
 
         return DefaultTabController(
-          length: isCurrentUser ? 2 : 1, // 他人の場合は投稿タブのみ
+          length: isCurrentUser ? 2 : 1,
           child: Scaffold(
             body: NestedScrollView(
               headerSliverBuilder: (context, innerBoxIsScrolled) {
@@ -81,7 +85,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                         fit: StackFit.expand,
                         children: [
                           Image.network(
-                            userProfile['headerImageUrl'] ?? 'https://thumb.ac-illust.com/bf/bf1ef42656626562ce9bfe28807c4e92_t.jpeg',
+                            headerImageUrl ?? 'https://thumb.ac-illust.com/bf/bf1ef42656626562ce9bfe28807c4e92_t.jpeg',
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) => Container(color: Colors.grey),
                           ),
@@ -112,8 +116,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                 backgroundColor: Theme.of(context).scaffoldBackgroundColor,
                                 child: CircleAvatar(
                                   radius: 42,
-                                  backgroundImage: userProfile['imageUrl'] != null ? NetworkImage(userProfile['imageUrl']) : null,
-                                  child: userProfile['imageUrl'] == null ? const Icon(Icons.person, size: 45) : null,
+                                  backgroundImage: profileImageUrl != null ? NetworkImage(profileImageUrl) : null,
+                                  backgroundColor: Colors.grey.shade300,
+                                  child: profileImageUrl == null ? const Icon(Icons.person, size: 45, color: Colors.white) : null,
                                 ),
                               ),
                               const SizedBox(width: 16),
@@ -147,7 +152,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                                           onPressed: () async {
                                              final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const EditProfileScreen()));
                                              if (result == true && mounted) {
-                                               setState(() {}); // 編集後にUIを更新
+                                               setState(() {});
                                              }
                                           },
                                           child: const Text('プロフィールを編集'),
@@ -176,7 +181,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            '@${userProfile['email']?.split('@')[0] ?? 'guest'}',
+                            '@${userProfile['username'] ?? 'guest'}',
                             style: const TextStyle(fontSize: 16, color: Colors.grey),
                           ),
                           const SizedBox(height: 12),
@@ -357,14 +362,15 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                     if (!userSnapshot.hasData || !userSnapshot.data!.exists) return const SizedBox.shrink();
                     
                     final authorData = userSnapshot.data!.data() as Map<String, dynamic>;
+                    final authorImageUrl = authorData['imageUrl'] as String?;
                     return Card(
                       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundImage: authorData['imageUrl'] != null
-                              ? NetworkImage(authorData['imageUrl']) : null,
-                          child: authorData['imageUrl'] == null
-                              ? const Icon(Icons.person) : null,
+                          backgroundImage: authorImageUrl != null ? NetworkImage(authorImageUrl) : null,
+                          backgroundColor: Colors.grey.shade300,
+                          child: authorImageUrl == null
+                              ? const Icon(Icons.person, color: Colors.white) : null,
                         ),
                         title: Text(authorData['nickname'] ?? 'ゲスト', style: const TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: Text(postData['content'] ?? ''),

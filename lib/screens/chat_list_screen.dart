@@ -1,5 +1,4 @@
 // lib/screens/chat_list_screen.dart
-// このコードでファイル全体を置き換えてください。
 
 import 'package:batch/screens/chat_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -30,17 +29,14 @@ class _ChatListScreenState extends State<ChatListScreen> {
         title: const Text('メッセージ'),
         automaticallyImplyLeading: false,
       ),
-      // ▼▼▼【ここから修正】▼▼▼
       body: StreamBuilder<QuerySnapshot>(
-        // Firestoreのクエリで直接並び替えを行うように変更
         stream: FirebaseFirestore.instance
             .collection('chat_rooms')
             .where('userIds', arrayContains: _currentUser!.uid)
-            .orderBy('lastUpdatedAt', descending: true) // 最後の更新日時が新しい順
+            .orderBy('lastUpdatedAt', descending: true)
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            // Firestoreの複合インデックスが作成されていない場合のエラーをハンドリング
             if (snapshot.error.toString().contains('INDEX_NOT_FOUND') || snapshot.error.toString().contains('requires an index')) {
                return const Center(
                 child: Padding(
@@ -63,7 +59,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
             return const Center(child: Text('チャット履歴がありません'));
           }
 
-          // 手動での並び替えは不要
           final chatDocs = snapshot.data!.docs;
 
           return ListView.builder(
@@ -77,7 +72,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
               
               if (peerId == null) return const SizedBox.shrink();
 
-              // 自分の未読数を取得
               final unreadCount = data['unreadCount_${_currentUser!.uid}'] ?? 0;
 
               return FutureBuilder<DocumentSnapshot>(
@@ -96,12 +90,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
                     nickname = peerUser['nickname'] ?? '不明なユーザー';
                     peerImageUrl = peerUser['imageUrl'];
                   }
-
+                  
                   return ListTile(
                     leading: CircleAvatar(
                       radius: 28,
-                      backgroundImage: (peerImageUrl != null && peerImageUrl.isNotEmpty) ? NetworkImage(peerImageUrl) : null,
-                      child: (peerImageUrl == null || peerImageUrl.isEmpty) ? const Icon(Icons.person) : null,
+                      backgroundColor: Colors.grey.shade300,
+                      backgroundImage: peerImageUrl != null ? NetworkImage(peerImageUrl) : null,
+                      child: peerImageUrl == null 
+                          ? const Icon(Icons.person, color: Colors.white) 
+                          : null,
                     ),
                     title: Text(nickname, style: const TextStyle(fontWeight: FontWeight.bold)),
                     subtitle: Text(
@@ -109,7 +106,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    // 未読数が1以上ならBadgeを表示
                     trailing: unreadCount > 0 
                       ? Badge(
                           label: Text('$unreadCount'),
@@ -135,7 +131,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           );
         },
       ),
-      // ▲▲▲【ここまで修正】▲▲▲
     );
   }
 }
+

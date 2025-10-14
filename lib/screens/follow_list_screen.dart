@@ -1,6 +1,17 @@
+// lib/screens/follow_list_screen.dart
+
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'user_profile_screen.dart';
+
+// URLかBase64かを判定してImageProviderを返すヘルパー
+ImageProvider? _getImageProvider(String? data) {
+  if (data == null || data.isEmpty) return null;
+  if (data.startsWith('http')) return NetworkImage(data);
+  try { return MemoryImage(base64Decode(data)); } catch (e) { return null; }
+}
+
 
 class FollowListScreen extends StatelessWidget {
   final String userId;
@@ -44,13 +55,16 @@ class FollowListScreen extends StatelessWidget {
                     return const SizedBox.shrink();
                   }
                   final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-                  final String? imageUrl = userData['imageUrl'];
+                  
+                  // ▼▼▼【ここから修正】画像表示部分の変更 ▼▼▼
+                  final imageProvider = _getImageProvider(userData['imageUrl']);
 
                   return ListTile(
                     leading: CircleAvatar(
-                      backgroundImage: (imageUrl != null && imageUrl.isNotEmpty) ? NetworkImage(imageUrl) : null,
-                      child: (imageUrl == null || imageUrl.isEmpty) ? const Icon(Icons.person) : null,
+                      backgroundImage: imageProvider,
+                      child: imageProvider == null ? const Icon(Icons.person) : null,
                     ),
+                    // ▲▲▲【ここまで修正】▲▲▲
                     title: Text(userData['nickname'] ?? '不明なユーザー'),
                     subtitle: Text(userData['bio'] ?? '', maxLines: 1, overflow: TextOverflow.ellipsis),
                     onTap: () {

@@ -1,10 +1,9 @@
 // lib/screens/my_page_screen.dart
-// このコードでファイル全体を置き換えてください。
+
 
 import 'package:batch/screens/edit_profile_screen.dart';
 import 'package:batch/screens/follow_list_screen.dart';
 import 'package:batch/screens/post_detail_screen.dart';
-import 'package:batch/screens/welcome_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -20,13 +19,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
   final user = FirebaseAuth.instance.currentUser;
   final String defaultHeaderImageUrl = 'https://t4.ftcdn.net/jpg/07/20/08/81/360_F_720088116_Je8m4Tn7LECnkKHQEABWLvOiWlJ7Qo8V.jpg';
 
-  // ▼▼▼【修正点】このファイルにあった_logoutメソッドは削除します ▼▼▼
-
   Future<void> _editProfile() async {
     final result = await Navigator.push(context,
         MaterialPageRoute(builder: (context) => const EditProfileScreen()));
     if (result == true && mounted) {
-      // StreamBuilderが自動で更新を検知するため、setStateは不要
+      // Rebuild to reflect changes
     }
   }
 
@@ -49,9 +46,8 @@ class _MyPageScreenState extends State<MyPageScreen> {
         }
 
         final userProfile = snapshot.data!.data() as Map<String, dynamic>;
-        final headerImageUrl = (userProfile['headerImageUrl'] as String?)?.isNotEmpty == true
-            ? userProfile['headerImageUrl'] as String
-            : defaultHeaderImageUrl;
+        
+        final headerImageUrl = userProfile['headerImageUrl'] as String?;
         final profileImageUrl = userProfile['imageUrl'] as String?;
         final displayUsername = '@${userProfile['username'] ?? 'no_id'}';
 
@@ -68,19 +64,13 @@ class _MyPageScreenState extends State<MyPageScreen> {
                     stretch: true,
                     automaticallyImplyLeading: false,
                     backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-                    // ▼▼▼【修正点】actionsプロパティ（ログアウトボタン）を削除 ▼▼▼
-                    // actions: [
-                    //   IconButton(
-                    //       icon: const Icon(Icons.logout_outlined),
-                    //       onPressed: _logout),
-                    // ],
                     flexibleSpace: FlexibleSpaceBar(
                       collapseMode: CollapseMode.pin,
                       background: Stack(
                         fit: StackFit.expand,
                         children: [
                           Image.network(
-                            headerImageUrl,
+                            headerImageUrl ?? defaultHeaderImageUrl,
                             fit: BoxFit.cover,
                             errorBuilder: (c, e, s) => Container(color: Colors.grey),
                           ),
@@ -108,13 +98,10 @@ class _MyPageScreenState extends State<MyPageScreen> {
                                       Theme.of(context).scaffoldBackgroundColor,
                                   child: CircleAvatar(
                                     radius: 37,
-                                    backgroundImage: (profileImageUrl != null &&
-                                            profileImageUrl.isNotEmpty)
-                                        ? NetworkImage(profileImageUrl)
-                                        : null,
-                                    child: (profileImageUrl == null ||
-                                            profileImageUrl.isEmpty)
-                                        ? const Icon(Icons.person, size: 40)
+                                    backgroundImage: profileImageUrl != null ? NetworkImage(profileImageUrl) : null,
+                                    backgroundColor: Colors.grey.shade300,
+                                    child: profileImageUrl == null
+                                        ? const Icon(Icons.person, size: 40, color: Colors.white)
                                         : null,
                                   ),
                                 ),
@@ -363,16 +350,16 @@ class _MyPageScreenState extends State<MyPageScreen> {
                     builder: (context, userSnapshot) {
                       final authorData =
                           userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
+                      final authorImageUrl = authorData['imageUrl'] as String?;
                       return Card(
                         margin:
                             const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundImage: authorData['imageUrl'] != null
-                                ? NetworkImage(authorData['imageUrl'])
-                                : null,
-                            child: authorData['imageUrl'] == null
-                                ? const Icon(Icons.person)
+                            backgroundImage: authorImageUrl != null ? NetworkImage(authorImageUrl) : null,
+                            backgroundColor: Colors.grey.shade300,
+                            child: authorImageUrl == null
+                                ? const Icon(Icons.person, color: Colors.white)
                                 : null,
                           ),
                           title: Text(authorData['nickname'] ?? '...',

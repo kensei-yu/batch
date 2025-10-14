@@ -1,5 +1,5 @@
 // lib/screens/settings_screen.dart
-// このコードをファイル全体に貼り付けてください。
+
 
 import 'package:batch/screens/privacy_policy_screen.dart';
 import 'package:batch/screens/terms_screen.dart';

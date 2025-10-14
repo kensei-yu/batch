@@ -1,5 +1,5 @@
 // lib/screens/edit_profile_screen.dart
-// このコードをファイル全体に貼り付けてください。
+
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -27,6 +27,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String? _currentHeaderImageUrl;
   bool _isSaving = false;
 
+  // ▼▼▼【ここから修正】変更があったか比較するために、初期値を保持する変数を追加 ▼▼▼
+  String _initialNickname = '';
+  String _initialUsername = '';
+  String _initialBio = '';
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +57,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _nicknameController.text = data['nickname'] ?? '';
         _usernameController.text = data['username'] ?? '';
         _bioController.text = data['bio'] ?? '';
+        
+        _initialNickname = _nicknameController.text;
+        _initialUsername = _usernameController.text;
+        _initialBio = _bioController.text;
         _currentProfileImageUrl = data['imageUrl'];
         _currentHeaderImageUrl = data['headerImageUrl'];
       });
@@ -69,6 +78,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  // ▼▼▼【ここから修正】Storageへ画像をアップロードする処理に変更 ▼▼▼
   Future<void> _saveProfile() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() { _isSaving = true; });
@@ -77,33 +87,48 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('ユーザーが見つかりません');
 
-      // 重要：ここでもユーザーIDの重複チェックが必要です
+      final Map<String, dynamic> dataToUpdate = {};
 
-      String? profileImageUrl = _currentProfileImageUrl;
+      // テキストフィールドの変更をチェック
+      final newNickname = _nicknameController.text.trim();
+      final newUsername = _usernameController.text.trim().toLowerCase();
+      final newBio = _bioController.text.trim();
+
+      if (newNickname != _initialNickname) dataToUpdate['nickname'] = newNickname;
+      if (newUsername != _initialUsername) dataToUpdate['username'] = newUsername;
+      if (newBio != _initialBio) dataToUpdate['bio'] = newBio;
+      
+      // プロフィール画像の変更をチェック
       if (_profileImageFile != null) {
         final ref = FirebaseStorage.instance.ref('user_images/${user.uid}/profile.jpg');
         await ref.putFile(_profileImageFile!);
-        profileImageUrl = await ref.getDownloadURL();
+        dataToUpdate['imageUrl'] = await ref.getDownloadURL();
       }
 
-      String? headerImageUrl = _currentHeaderImageUrl;
+      // ヘッダー画像の変更をチェック
       if (_headerImageFile != null) {
         final ref = FirebaseStorage.instance.ref('user_images/${user.uid}/header.jpg');
         await ref.putFile(_headerImageFile!);
-        headerImageUrl = await ref.getDownloadURL();
+        dataToUpdate['headerImageUrl'] = await ref.getDownloadURL();
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'nickname': _nicknameController.text.trim(),
-        'username': _usernameController.text.trim().toLowerCase(),
-        'bio': _bioController.text.trim(),
-        'imageUrl': profileImageUrl,
-        'headerImageUrl': headerImageUrl,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      // 更新するデータが何か一つでもあれば、DBに書き込む
+      if (dataToUpdate.isNotEmpty) {
+        dataToUpdate['updatedAt'] = FieldValue.serverTimestamp();
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .update(dataToUpdate);
+      }
 
-      await user.updateDisplayName(_nicknameController.text.trim());
-      if (profileImageUrl != null) await user.updatePhotoURL(profileImageUrl);
+      // ニックネームが変更されていたら、Authの表示名も更新
+      if (dataToUpdate.containsKey('nickname')) {
+        await user.updateDisplayName(newNickname);
+      }
+      // プロフィール画像が変更されていたら、AuthのphotoURLも更新
+      if (dataToUpdate.containsKey('imageUrl')) {
+        await user.updatePhotoURL(dataToUpdate['imageUrl']);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('プロフィールを更新しました！')));
@@ -115,6 +140,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (mounted) setState(() { _isSaving = false; });
     }
   }
+
+  // Base64関連の処理は不要になったので、シンプルなヘルパーに変更
+  ImageProvider? _getImageProvider(File? file, String? url) {
+    if (file != null) return FileImage(file);
+    if (url != null && url.isNotEmpty) return NetworkImage(url);
+    return null;
+  }
+  // ▲▲▲【ここまで修正】▲▲▲
 
   @override
   Widget build(BuildContext context) {
@@ -181,17 +214,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildImageEditors() {
-    final headerImage = _headerImageFile != null
-        ? FileImage(_headerImageFile!)
-        : (_currentHeaderImageUrl != null && _currentHeaderImageUrl!.isNotEmpty
-            ? NetworkImage(_currentHeaderImageUrl!)
-            : null) as ImageProvider?;
-
-    final profileImage = _profileImageFile != null
-        ? FileImage(_profileImageFile!)
-        : (_currentProfileImageUrl != null && _currentProfileImageUrl!.isNotEmpty
-            ? NetworkImage(_currentProfileImageUrl!)
-            : null) as ImageProvider?;
+    final headerImage = _getImageProvider(_headerImageFile, _currentHeaderImageUrl);
+    final profileImage = _getImageProvider(_profileImageFile, _currentProfileImageUrl);
 
     return SizedBox(
       height: 220,
@@ -208,7 +232,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 color: Colors.grey[300],
                 image: headerImage != null ? DecorationImage(image: headerImage, fit: BoxFit.cover) : null,
               ),
-              child: Center(child: Icon(Icons.camera_alt_outlined, color: Colors.white.withOpacity(0.7), size: 32)),
+              child: headerImage == null ? Center(child: Icon(Icons.camera_alt_outlined, color: Colors.white.withOpacity(0.7), size: 32)) : null,
             ),
           ),
           Positioned(

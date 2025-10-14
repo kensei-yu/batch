@@ -1,5 +1,4 @@
 // lib/screens/welcome_screen.dart
-// このコードでファイル全体に貼り付けてください。
 
 import 'package:batch/screens/login_screen.dart';
 import 'package:batch/screens/registration_screen.dart';

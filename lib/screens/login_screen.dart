@@ -1,5 +1,5 @@
 // lib/screens/login_screen.dart
-// このコードでファイル全体を置き換えてください。
+
 
 import 'package:batch/screens/privacy_policy_screen.dart';
 import 'package:batch/screens/terms_screen.dart';

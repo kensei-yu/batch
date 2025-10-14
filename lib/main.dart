@@ -1,5 +1,5 @@
 // lib/main.dart
-// このコードをファイル全体に貼り付けてください。
+
 
 import 'package:batch/auth_gate.dart';
 import 'package:batch/firebase_options.dart';

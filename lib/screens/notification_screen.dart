@@ -1,5 +1,5 @@
 // lib/screens/notification_screen.dart
-// このコードでファイル全体を置き換えてください。
+
 
 import 'package:batch/screens/post_detail_screen.dart';
 import 'package:batch/screens/user_profile_screen.dart';

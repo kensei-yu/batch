@@ -1,9 +1,8 @@
 // lib/screens/timeline_screen.dart
-// このコードでファイル全体を置き換えてください。
+
 
 import 'package:batch/screens/notification_screen.dart';
 import 'package:batch/screens/post_detail_screen.dart';
-import 'package:batch/screens/settings_screen.dart';
 import 'package:batch/screens/user_profile_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -19,7 +18,6 @@ class TimelineScreen extends StatefulWidget {
 class _TimelineScreenState extends State<TimelineScreen> {
   final _currentUser = FirebaseAuth.instance.currentUser;
 
-  // ... (投稿削除、いいねのロジックは変更なし)
   Future<void> _deletePost(BuildContext context, String postId) async {
     final confirmDelete = await showDialog<bool>(
       context: context,
@@ -215,16 +213,20 @@ class _PostCard extends StatelessWidget {
         final userInfo =
             userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
         final displayName = userInfo['nickname'] ?? 'ゲストユーザー';
-        final String? imageUrl = userInfo['imageUrl'];
-        final String userHandle = '@${userInfo['username'] ?? 'no_id'}';
+        
+        final imageUrl = userInfo['imageUrl'] as String?;
+        final userHandle = '@${userInfo['username'] ?? 'no_id'}';
+        
+        final postImageUrl = data['imageUrl'] as String?;
+        final postContent = data['content'] as String? ?? '';
 
         return Card(
+          clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
                     builder: (context) => PostDetailScreen(postId: postId))),
-            borderRadius: BorderRadius.circular(16),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -240,12 +242,10 @@ class _PostCard extends StatelessWidget {
                                     UserProfileScreen(userId: postUserId))),
                         child: CircleAvatar(
                           radius: 24,
-                          backgroundImage: (imageUrl != null &&
-                                  imageUrl.isNotEmpty)
-                              ? NetworkImage(imageUrl)
-                              : null,
-                          child: (imageUrl == null || imageUrl.isEmpty)
-                              ? const Icon(Icons.person, size: 24)
+                          backgroundColor: Colors.grey.shade300,
+                          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+                          child: imageUrl == null
+                              ? const Icon(Icons.person, size: 24, color: Colors.white)
                               : null,
                         ),
                       ),
@@ -269,9 +269,25 @@ class _PostCard extends StatelessWidget {
                             onPressed: onDelete)
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Text(data['content'] ?? '',
-                      style: const TextStyle(fontSize: 15, height: 1.5)),
+
+                  if (postContent.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(postContent,
+                        style: const TextStyle(fontSize: 15, height: 1.5)),
+                  ],
+
+                  if (postImageUrl != null) ...[
+                    const SizedBox(height: 16),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12.0),
+                      child: Image.network(
+                        postImageUrl,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 12),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -301,7 +317,6 @@ class _PostCard extends StatelessWidget {
                               icon: isLiked
                                   ? Icons.favorite
                                   : Icons.favorite_border,
-                              // ▼▼▼【ここを修正】テーマカラーを使う ▼▼▼
                               color: isLiked
                                   ? Theme.of(context).colorScheme.primary
                                   : Colors.grey,

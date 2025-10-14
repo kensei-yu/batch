@@ -1,5 +1,5 @@
 // lib/screens/home_screen.dart
-// このコードをファイル全体に貼り付けてください。
+
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';

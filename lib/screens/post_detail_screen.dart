@@ -1,10 +1,15 @@
 // lib/screens/post_detail_screen.dart
-// このコードでファイル全体を貼り付けてください。
 
+
+import 'dart:io';
 import 'package:batch/screens/user_profile_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path/path.dart' as path;
+
 
 class PostDetailScreen extends StatefulWidget {
   final String postId;
@@ -18,6 +23,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final TextEditingController _commentController = TextEditingController();
   final _currentUser = FirebaseAuth.instance.currentUser;
   String? _postAuthorId;
+  
+  File? _commentImageFile;
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -25,6 +33,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _fetchPostAuthor();
   }
   
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchPostAuthor() async {
     try {
       final postDoc = await FirebaseFirestore.instance.collection('posts').doc(widget.postId).get();
@@ -38,80 +52,64 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
-  Future<void> _addComment() async {
-    if (_postAuthorId == null || _commentController.text.trim().isEmpty || _currentUser == null) return;
-    final commentText = _commentController.text.trim();
-    final newCommentRef = FirebaseFirestore.instance.collection('posts').doc(widget.postId).collection('comments').doc();
-    await newCommentRef.set({ 'id': newCommentRef.id, 'userId': _currentUser!.uid, 'text': commentText, 'timestamp': FieldValue.serverTimestamp() });
-    await FirebaseFirestore.instance.collection('posts').doc(widget.postId).update({'commentCount': FieldValue.increment(1)});
-    _commentController.clear();
-    FocusScope.of(context).unfocus();
-    if (_currentUser!.uid != _postAuthorId) {
-      final notificationRef = FirebaseFirestore.instance.collection('users').doc(_postAuthorId!).collection('notifications').doc();
-      final currentUserDoc = await FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).get();
-      final currentUserNickname = currentUserDoc.data()?['nickname'] ?? '誰か';
-      await notificationRef.set({ 'id': notificationRef.id, 'type': 'reply', 'senderId': _currentUser!.uid, 'message': '$currentUserNickname さんがあなたの投稿に返信しました。', 'postId': widget.postId, 'isRead': false, 'timestamp': FieldValue.serverTimestamp() });
+  Future<void> _pickImageForComment() async {
+    final pickedFile = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (pickedFile != null) {
+      setState(() => _commentImageFile = File(pickedFile.path));
     }
   }
+  
+  Future<void> _addComment() async {
+    if (_commentController.text.trim().isEmpty && _commentImageFile == null) return;
+    if (_postAuthorId == null || _currentUser == null) return;
 
-  void _showAttachmentMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return SafeArea(
-          child: Container(
-            margin: const EdgeInsets.all(8.0),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Wrap(
-                alignment: WrapAlignment.spaceAround,
-                children: [
-                  _buildMenuOption(icon: Icons.photo_outlined, label: '画像', onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('画像添付は準備中です')));
-                  }),
-                  _buildMenuOption(icon: Icons.videocam_outlined, label: '動画', onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('動画添付は準備中です')));
-                  }),
-                  _buildMenuOption(icon: Icons.mic_none, label: '音声', onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ボイスメッセージは準備中です')));
-                  }),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
+    setState(() { _isSending = true; });
 
-  Widget _buildMenuOption({required IconData icon, required String label, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.all(8.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              child: Icon(icon, size: 32, color: Theme.of(context).colorScheme.primary),
-            ),
-            const SizedBox(height: 8),
-            Text(label),
-          ],
-        ),
-      ),
-    );
+    try {
+      String? imageUrl;
+      if (_commentImageFile != null) {
+        final fileName = DateTime.now().millisecondsSinceEpoch.toString() + path.extension(_commentImageFile!.path);
+        final ref = FirebaseStorage.instance.ref('comment_images/${widget.postId}/${_currentUser!.uid}/$fileName');
+        await ref.putFile(_commentImageFile!);
+        imageUrl = await ref.getDownloadURL();
+      }
+
+      final commentText = _commentController.text.trim();
+      final newCommentRef = FirebaseFirestore.instance.collection('posts').doc(widget.postId).collection('comments').doc();
+      
+      await newCommentRef.set({
+        'id': newCommentRef.id,
+        'userId': _currentUser!.uid,
+        'text': commentText,
+        'imageUrl': imageUrl,
+        'timestamp': FieldValue.serverTimestamp()
+      });
+
+      await FirebaseFirestore.instance.collection('posts').doc(widget.postId).update({'commentCount': FieldValue.increment(1)});
+      
+      _commentController.clear();
+      setState(() => _commentImageFile = null);
+      FocusScope.of(context).unfocus();
+
+      if (_currentUser!.uid != _postAuthorId) {
+        final notificationRef = FirebaseFirestore.instance.collection('users').doc(_postAuthorId!).collection('notifications').doc();
+        final currentUserDoc = await FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).get();
+        final currentUserNickname = currentUserDoc.data()?['nickname'] ?? '誰か';
+        await notificationRef.set({
+          'id': notificationRef.id,
+          'type': 'reply',
+          'senderId': _currentUser!.uid,
+          'message': '$currentUserNickname さんがあなたの投稿に返信しました。',
+          'postId': widget.postId,
+          'isRead': false,
+          'timestamp': FieldValue.serverTimestamp()
+        });
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('コメントの送信に失敗しました: $e')));
+    } finally {
+      if (mounted) setState(() { _isSending = false; });
+    }
   }
 
   @override
@@ -147,7 +145,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
         if (!snapshot.data!.exists) return const Padding(padding: EdgeInsets.all(16), child: Center(child: Text('投稿が見つかりません。')));
+        
         final data = snapshot.data!.data() as Map<String, dynamic>;
+        
         return _PostCard(postData: data);
       },
     );
@@ -158,11 +158,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       stream: FirebaseFirestore.instance.collection('posts').doc(widget.postId).collection('comments').orderBy('timestamp', descending: true).snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const SliverToBoxAdapter(child: Center(child: CircularProgressIndicator()));
-        if (snapshot.hasError) {
-          print("コメント読み込みエラー: ${snapshot.error}");
-          return SliverToBoxAdapter(child: Center(child: Text("コメントの読み込みに失敗しました:\n${snapshot.error}", textAlign: TextAlign.center)));
-        }
+        if (snapshot.hasError) return SliverToBoxAdapter(child: Center(child: Text("コメントの読み込みに失敗しました:\n${snapshot.error}", textAlign: TextAlign.center)));
         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const SliverToBoxAdapter(child: Center(child: Padding(padding: EdgeInsets.all(20.0), child: Text('まだコメントはありません。'))));
+        
         final comments = snapshot.data!.docs;
         return SliverList(
           delegate: SliverChildBuilderDelegate(
@@ -178,33 +176,68 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
   
   Widget _buildCommentInputField() {
-    final bool canComment = _postAuthorId != null;
     return Container(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-        decoration: BoxDecoration(color: Theme.of(context).cardColor, border: Border(top: BorderSide(color: Colors.grey.shade200))),
-        child: SafeArea(
-          top: false,
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                color: Colors.grey.shade600,
-                onPressed: _showAttachmentMenu,
-              ),
-              Expanded(
-                child: TextField(
-                  controller: _commentController,
-                  decoration: InputDecoration(hintText: 'コメントを追加...', filled: true, fillColor: Colors.grey[100], border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16.0)),
+      decoration: BoxDecoration(color: Theme.of(context).cardColor, border: Border(top: BorderSide(color: Colors.grey.shade200))),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_commentImageFile != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 16, right: 16, top: 8),
+                child: Stack(
+                  alignment: Alignment.topRight,
+                  children: [
+                    Container(
+                      height: 100,
+                      width: 100,
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+                      child: Image.file(_commentImageFile!, fit: BoxFit.cover),
+                    ),
+                    IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      icon: const CircleAvatar(radius: 12, backgroundColor: Colors.black54, child: Icon(Icons.close, color: Colors.white, size: 16)),
+                      onPressed: () => setState(() => _commentImageFile = null),
+                    )
+                  ],
                 ),
               ),
-              IconButton(
-                icon: Icon(Icons.send_rounded, color: canComment ? Theme.of(context).colorScheme.primary : Colors.grey),
-                onPressed: canComment ? _addComment : null,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline),
+                    color: Colors.grey.shade600,
+                    onPressed: _pickImageForComment,
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _commentController,
+                      minLines: 1, maxLines: 5,
+                      textCapitalization: TextCapitalization.sentences,
+                      decoration: InputDecoration(
+                        hintText: 'コメントを追加...',
+                        filled: true,
+                        fillColor: Colors.grey[200],
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+                        isDense: true
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.send_rounded, color: Theme.of(context).colorScheme.primary),
+                    onPressed: _isSending || (_commentController.text.trim().isEmpty && _commentImageFile == null) ? null : _addComment,
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -218,12 +251,16 @@ class _PostCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String postUserId = postData['userId'];
+    final postImageUrl = postData['imageUrl'] as String?;
+    final postContent = postData['content'] ?? '';
+
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance.collection('users').doc(postUserId).get(),
       builder: (context, userSnapshot) {
         if (!userSnapshot.hasData) return const SizedBox.shrink();
         final userData = userSnapshot.data?.data() as Map<String, dynamic>? ?? {};
-        final profileImageUrl = userData['imageUrl'];
+        final profileImageUrl = userData['imageUrl'] as String?;
+
         return Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -231,13 +268,26 @@ class _PostCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  CircleAvatar(backgroundImage: profileImageUrl != null ? NetworkImage(profileImageUrl) : null, child: profileImageUrl == null ? const Icon(Icons.person) : null),
+                  CircleAvatar(
+                    backgroundImage: profileImageUrl != null ? NetworkImage(profileImageUrl) : null,
+                    backgroundColor: Colors.grey.shade300,
+                    child: profileImageUrl == null ? const Icon(Icons.person, color: Colors.white) : null,
+                  ),
                   const SizedBox(width: 12),
                   Text(userData['nickname'] ?? '...', style: Theme.of(context).textTheme.titleMedium),
                 ],
               ),
-              const SizedBox(height: 16),
-              Text(postData['content'] ?? '', style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16, height: 1.6)),
+              if(postContent.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(postContent, style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontSize: 16, height: 1.6)),
+              ],
+              if(postImageUrl != null) ...[
+                const SizedBox(height: 16),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(postImageUrl, fit: BoxFit.cover, width: double.infinity),
+                ),
+              ]
             ],
           ),
         );
@@ -255,21 +305,42 @@ class _CommentTile extends StatelessWidget {
     final String commentUserId = commentData['userId'] ?? '';
     if (commentUserId.isEmpty) return const SizedBox.shrink();
 
+    final commentImageUrl = commentData['imageUrl'] as String?;
+    final commentText = commentData['text'] ?? '';
+
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance.collection('users').doc(commentUserId).get(),
       builder: (context, userSnapshot) {
         if (userSnapshot.connectionState == ConnectionState.waiting) return const ListTile(title: Text("読み込み中..."));
         if (!userSnapshot.hasData || !userSnapshot.data!.exists) return const SizedBox.shrink();
+        
         final userData = userSnapshot.data!.data() as Map<String, dynamic>;
-        final profileImageUrl = userData['imageUrl'];
+        final profileImageUrl = userData['imageUrl'] as String?;
 
         return ListTile(
           leading: GestureDetector(
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => UserProfileScreen(userId: commentUserId))),
-            child: CircleAvatar(backgroundImage: profileImageUrl != null ? NetworkImage(profileImageUrl) : null, child: profileImageUrl == null ? const Icon(Icons.person) : null),
+            child: CircleAvatar(
+              backgroundImage: profileImageUrl != null ? NetworkImage(profileImageUrl) : null,
+              backgroundColor: Colors.grey.shade300,
+              child: profileImageUrl == null ? const Icon(Icons.person, color: Colors.white) : null,
+            ),
           ),
           title: Text(userData['nickname'] ?? '...', style: const TextStyle(fontWeight: FontWeight.bold)),
-          subtitle: Text(commentData['text'] ?? ''),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (commentText.isNotEmpty) Text(commentText),
+              if (commentImageUrl != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.network(commentImageUrl, height: 150, width: double.infinity, fit: BoxFit.cover),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );

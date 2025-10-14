@@ -1,10 +1,21 @@
+// lib/screens/matching_screen.dart
+
+
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'matching_onboarding_screen.dart';
-import 'match_dialog.dart'; // 作成したダイアログをインポート
+import 'match_dialog.dart';
+
+// URLかBase64かを判定してImageProviderを返すヘルパー
+ImageProvider? _getImageProvider(String? data) {
+  if (data == null || data.isEmpty) return null;
+  if (data.startsWith('http')) return NetworkImage(data);
+  try { return MemoryImage(base64Decode(data)); } catch (e) { return null; }
+}
 
 class MatchingScreen extends StatefulWidget {
   const MatchingScreen({Key? key}) : super(key: key);
@@ -177,14 +188,13 @@ class _MatchingScreenState extends State<MatchingScreen> {
                 child: CardSwiper(
                   controller: _swiperController,
                   cardsCount: _candidates.length,
-                  // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
-                  // ★ この行を追加してエラーを修正しました ★
-                  // ★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★★
                   numberOfCardsDisplayed: _candidates.length < 2 ? 1 : 2,
                   onSwipe: _onSwipe,
                   padding: const EdgeInsets.all(24.0),
                   cardBuilder: (context, index, percentThresholdX, percentThresholdY) {
                     final candidate = _candidates[index];
+                    // ▼▼▼【ここから修正】画像表示部分の変更 ▼▼▼
+                    final candidateImageProvider = _getImageProvider(candidate['imageUrl']);
                     return Card(
                       elevation: 4.0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -192,10 +202,11 @@ class _MatchingScreenState extends State<MatchingScreen> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: candidate['imageUrl'] != null && candidate['imageUrl'].isNotEmpty
-                                ? Image.network(candidate['imageUrl'], fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _buildPlaceholderCard())
+                            child: candidateImageProvider != null
+                                ? Image(image: candidateImageProvider, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => _buildPlaceholderCard())
                                 : _buildPlaceholderCard(),
                           ),
+                          // ▲▲▲【ここまで修正】▲▲▲
                           Container(
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
