@@ -111,7 +111,34 @@ class _ChatScreenState extends State<ChatScreen> {
       final batch = FirebaseFirestore.instance.batch();
       batch.set(chatRoomRef, chatRoomData, SetOptions(merge: true));
       batch.set(newMessageRef, messageData);
+
+      // 通知を作成
+      final notificationRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(recipientId)
+          .collection('notifications')
+          .doc();
+      
+      final currentUserDoc = await FirebaseFirestore.instance.collection('users').doc(myId).get();
+      final senderNickname = currentUserDoc.data()?['nickname'] ?? '誰か';
+
+      final notificationData = {
+        'id': notificationRef.id,
+        'type': 'message',
+        'senderId': myId,
+        'message': '$senderNickname さんからメッセージが届きました。',
+        'chatRoomId': chatRoomId,
+        'isRead': false,
+        'timestamp': FieldValue.serverTimestamp(),
+      };
+      
+      batch.set(notificationRef, notificationData);
+
+      print("DEBUG: Sending message from $myId to $recipientId");
+      print("DEBUG: Notification Data: $notificationData");
+
       await batch.commit();
+      print("DEBUG: Batch committed successfully");
 
       _messageController.clear();
       setState(() => _imageFile = null);
@@ -220,6 +247,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       controller: _messageController,
                       maxLines: 5, minLines: 1,
                       textCapitalization: TextCapitalization.sentences,
+                      onChanged: (val) => setState(() {}),
                       decoration: InputDecoration(
                         hintText: 'メッセージを入力...',
                         filled: true,

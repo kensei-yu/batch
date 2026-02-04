@@ -225,24 +225,33 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           ? IconButton(icon: const Icon(Icons.arrow_back), onPressed: _previousPage)
           : null,
       ),
-      body: Form(
-        key: _formKey,
-        child: Column(
-          children: [
-            LinearProgressIndicator(value: (_currentPage + 1) / 3),
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (page) => setState(() => _currentPage = page),
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _buildProfilePage(),
-                  _buildBirthDatePage(),
-                  _buildLocationPage(),
-                ],
+      body: Container(
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/background.PNG'),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(Colors.black38, BlendMode.darken),
+          ),
+        ),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              LinearProgressIndicator(value: (_currentPage + 1) / 3),
+              Expanded(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: (page) => setState(() => _currentPage = page),
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildProfilePage(),
+                    _buildBirthDatePage(),
+                    _buildLocationPage(),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

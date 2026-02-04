@@ -1,6 +1,5 @@
 // lib/screens/home_screen.dart
 
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,6 +8,7 @@ import 'my_page_screen.dart';
 import 'post_screen.dart';
 import 'chat_list_screen.dart';
 import 'matching_screen.dart';
+import 'create_recruitment_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -49,8 +49,23 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
   }
+
+  void _showCreateRecruitmentScreen(BuildContext context) async {
+    final result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const CreateRecruitmentScreen(),
+        fullscreenDialog: true,
+      ),
+    );
+
+    if (result == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('募集を作成しました！')),
+      );
+    }
+  }
   
-  // ▼▼▼【ここから修正】▼▼▼
   // チャットアイコンに未読数バッジを付けるためのウィジェット
   Widget _buildChatIconWithBadge(bool isActive) {
     // アイコンの色をアクティブかどうかで決定
@@ -126,5 +141,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-  // ▲▲▲【ここまで修正】▲▲▲
 }

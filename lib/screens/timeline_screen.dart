@@ -3,6 +3,7 @@
 
 import 'package:batch/screens/notification_screen.dart';
 import 'package:batch/screens/post_detail_screen.dart';
+import 'package:batch/screens/settings_screen.dart'; // Import added
 import 'package:batch/screens/user_profile_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -53,7 +54,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
     }
   }
 
-  Future<void> _toggleLike(String postId, String postAuthorId) async {
+  Future<void> _toggleLike(String postId, String postAuthorId, String postContent) async {
     if (_currentUser == null) return;
     final currentUserId = _currentUser!.uid;
 
@@ -91,6 +92,7 @@ class _TimelineScreenState extends State<TimelineScreen> {
           'type': 'like',
           'senderId': currentUserId,
           'message': '$currentUserNickname さんがあなたの投稿に「いいね」しました。',
+          'content': postContent, // Add content
           'postId': postId,
           'isRead': false,
           'timestamp': FieldValue.serverTimestamp(),
@@ -106,7 +108,27 @@ class _TimelineScreenState extends State<TimelineScreen> {
         leading: IconButton(
           icon: const Icon(Icons.settings_outlined),
           onPressed: () {
-            Navigator.pushNamed(context, '/settings');
+              Navigator.push(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      const SettingsScreen(),
+                  transitionsBuilder:
+                      (context, animation, secondaryAnimation, child) {
+                    const begin = Offset(-1.0, 0.0);
+                    const end = Offset.zero;
+                    const curve = Curves.ease;
+
+                    var tween = Tween(begin: begin, end: end)
+                        .chain(CurveTween(curve: curve));
+
+                    return SlideTransition(
+                      position: animation.drive(tween),
+                      child: child,
+                    );
+                  },
+                ),
+              );
           },
         ),
         title: const Text('BATCH'),
@@ -142,10 +164,12 @@ class _TimelineScreenState extends State<TimelineScreen> {
 
               if (postUserId.isEmpty) return const SizedBox.shrink();
 
+              final postContent = data['content'] as String? ?? '';
+
               return _PostCard(
                 post: post,
                 onDelete: () => _deletePost(context, post.id),
-                onToggleLike: () => _toggleLike(post.id, postUserId),
+                onToggleLike: () => _toggleLike(post.id, postUserId, postContent),
               );
             },
           );

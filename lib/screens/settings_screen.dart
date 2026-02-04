@@ -34,31 +34,158 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _pickColor() {
-    Color pickerColor = themeColorNotifier.value;
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true, // Allow taller sheets
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('テーマカラーを選択'),
-          content: SingleChildScrollView(
-            child: BlockPicker(
-              pickerColor: pickerColor,
-              onColorChanged: (color) {
-                pickerColor = color;
-              },
+        // Color Definitions
+        final pinks = [
+          Colors.pink,
+          const Color(0xFFFF00FF), // Magenta
+          Colors.purple,
+        ];
+        final warms = [
+          Colors.red,
+          Colors.orange,
+          Colors.yellow,
+        ];
+        final cools = [
+          Colors.lightGreen,
+          Colors.green,
+          Colors.cyan,
+          Colors.blue,
+        ];
+
+        Widget buildColorSection(String title, List<Color> colors) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 20,
+                runSpacing: 16,
+                children: colors.map((color) {
+                  final isSelected = themeColorNotifier.value.value == color.value;
+                  return GestureDetector(
+                    onTap: () {
+                      saveThemeColor(color);
+                      Navigator.of(context).pop();
+                    },
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.grey.shade300,
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: isSelected
+                          ? const Icon(Icons.check, color: Colors.white, size: 30)
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+            ],
+          );
+        }
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                   Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const Center(
+                    child: Text(
+                      'テーマカラーを選択',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  buildColorSection('ピンク・パープル系', pinks),
+                  buildColorSection('レッド・イエロー系', warms),
+                  buildColorSection('グリーン・ブルー系', cools),
+                ],
+              ),
             ),
           ),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('キャンセル'),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            TextButton(
-              child: const Text('決定'),
+        );
+      },
+    );
+  }
+
+  void _pickThemeMode() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return SimpleDialog(
+          title: const Text('外観モードを選択'),
+          children: [
+            SimpleDialogOption(
               onPressed: () {
-                saveThemeColor(pickerColor);
-                Navigator.of(context).pop();
+                saveThemeMode(ThemeMode.system);
+                Navigator.pop(context);
               },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.0),
+                child: Text('システム設定に従う'),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                saveThemeMode(ThemeMode.light);
+                Navigator.pop(context);
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.0),
+                child: Text('ライトモード'),
+              ),
+            ),
+            SimpleDialogOption(
+              onPressed: () {
+                saveThemeMode(ThemeMode.dark);
+                Navigator.pop(context);
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8.0),
+                child: Text('ダークモード'),
+              ),
             ),
           ],
         );
@@ -179,6 +306,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 onTap: _pickColor,
+              );
+            },
+          ),
+          ValueListenableBuilder<ThemeMode>(
+            valueListenable: themeModeNotifier,
+            builder: (context, currentMode, child) {
+              return _SettingsListItem(
+                icon: Icons.brightness_6_outlined,
+                title: '外観モード',
+                trailing: Text(
+                  currentMode == ThemeMode.system
+                      ? 'システム'
+                      : currentMode == ThemeMode.light
+                          ? 'ライト'
+                          : 'ダーク',
+                  style: const TextStyle(color: Colors.grey),
+                ),
+                onTap: _pickThemeMode,
               );
             },
           ),

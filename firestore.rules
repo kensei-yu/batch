@@ -1,0 +1,100 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // === usersコレクション ===
+    match /users/{userId} {
+      // 誰でも読み取り可能（プロフィール表示のため）
+      allow read: if isAuthenticated();
+      // 本人のみ作成・更新・削除可能
+      allow create, update, delete: if isOwner(userId);
+
+      // 通知サブコレクション
+      match /notifications/{notificationId} {
+        // 他人が通知を作成できる（フォロー時など）
+        allow create: if isAuthenticated();
+        // 本人のみ読み取り・更新（既読化）・削除可能
+        allow read, update, delete: if isOwner(userId);
+      }
+
+      // フォロワーサブコレクション (users/B/followers/A -> AがBをフォロー)
+      match /followers/{followerId} {
+        allow read: if isAuthenticated();
+        // フォローする本人(ID=A)のみ書き込み可能
+        allow write: if isOwner(followerId);
+      }
+      
+      // フォロー中サブコレクション (users/A/following/B -> AがBをフォロー)
+      match /following/{followingId} {
+        allow read: if isAuthenticated();
+        // フォローする本人(ID=A)のみ書き込み可能
+        allow write: if isOwner(userId);
+      }
+
+      // その他のサブコレクション（いいね履歴など）は本人のみ読み書き
+      match /{subcollection}/{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // === postsコレクション ===
+    match /posts/{postId} {
+      allow read: if isAuthenticated();
+      // 作成時はuserIdフィールドが本人と一致すること
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      // 更新（いいね数などのカウントのみ許可）
+      allow update: if isAuthenticated() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'commentCount']) ||
+        resource.data.userId == request.auth.uid // 自分の投稿なら編集可
+      );
+      // 削除は本人のみ
+      allow delete: if resource.data.userId == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+        // コメント投稿者 または 記事投稿者が削除可能
+        allow delete: if resource.data.userId == request.auth.uid || 
+                         get(/databases/$(database)/documents/posts/$(postId)).data.userId == request.auth.uid;
+      }
+    }
+
+    // === chat_roomsコレクション ===
+    match /chat_rooms/{chatRoomId} {
+      // 参加者のみアクセス可能にするのが理想ですが、現状は緩めに設定
+      allow read, write: if isAuthenticated();
+
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // === match system ===
+    match /likes/{likeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.fromUserId == request.auth.uid;
+    }
+
+    match /matches/{matchId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+    }
+
+    // === recruitmentsコレクション ===
+    match /recruitments/{recruitmentId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.userId);
+    }
+  }
+}

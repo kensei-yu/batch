@@ -1,5 +1,6 @@
 // lib/screens/user_profile_screen.dart
 
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -193,12 +194,11 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                       ),
                     ),
                   ),
-                   SliverPersistentHeader(
+                  SliverPersistentHeader(
                     delegate: _SliverAppBarDelegate(
                       TabBar(
-                        indicatorColor: Colors.black,
-                        labelColor: Colors.black,
-                        unselectedLabelColor: Colors.grey,
+                        indicatorSize: TabBarIndicatorSize.label,
+                        indicatorWeight: 3.0,
                         tabs: [
                           const Tab(text: '投稿'),
                           if (isCurrentUser) const Tab(text: 'いいね'),
@@ -405,5 +405,5 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
+  bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => true;
 }

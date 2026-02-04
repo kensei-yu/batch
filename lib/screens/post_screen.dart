@@ -125,6 +125,7 @@ class _PostScreenState extends State<PostScreen> {
                 maxLines: null,
                 expands: true,
                 textAlignVertical: TextAlignVertical.top,
+                onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   hintText: '音楽の輪を広げよう',
                   border: InputBorder.none,

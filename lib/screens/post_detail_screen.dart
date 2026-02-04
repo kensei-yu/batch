@@ -92,6 +92,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       FocusScope.of(context).unfocus();
 
       if (_currentUser!.uid != _postAuthorId) {
+        print("DEBUG: Creating reply notification for $_postAuthorId");
         final notificationRef = FirebaseFirestore.instance.collection('users').doc(_postAuthorId!).collection('notifications').doc();
         final currentUserDoc = await FirebaseFirestore.instance.collection('users').doc(_currentUser!.uid).get();
         final currentUserNickname = currentUserDoc.data()?['nickname'] ?? '誰か';
@@ -100,12 +101,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           'type': 'reply',
           'senderId': _currentUser!.uid,
           'message': '$currentUserNickname さんがあなたの投稿に返信しました。',
+          'content': commentText,
           'postId': widget.postId,
           'isRead': false,
           'timestamp': FieldValue.serverTimestamp()
         });
+        print("DEBUG: Reply notification created");
+      } else {
+        print("DEBUG: Self-reply, skipping notification");
       }
     } catch (e) {
+      print("DEBUG: Error adding comment: $e");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('コメントの送信に失敗しました: $e')));
     } finally {
       if (mounted) setState(() { _isSending = false; });
@@ -218,8 +224,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   Expanded(
                     child: TextField(
                       controller: _commentController,
-                      minLines: 1, maxLines: 5,
+                      maxLines: 5,
                       textCapitalization: TextCapitalization.sentences,
+                      onChanged: (_) => setState(() {}),
                       decoration: InputDecoration(
                         hintText: 'コメントを追加...',
                         filled: true,

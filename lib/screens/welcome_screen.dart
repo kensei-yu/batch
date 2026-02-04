@@ -13,7 +13,7 @@ class WelcomeScreen extends StatelessWidget {
       body: Container(
         decoration: const BoxDecoration(
           image: DecorationImage(
-            image: AssetImage('assets/background.PNG'), // 画像が見つからない場合はプロジェクトに追加してください
+            image: AssetImage('assets/background.PNG'),
             fit: BoxFit.cover,
             colorFilter: ColorFilter.mode(Colors.black38, BlendMode.darken),
           ),

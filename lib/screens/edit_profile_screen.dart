@@ -27,7 +27,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   String? _currentHeaderImageUrl;
   bool _isSaving = false;
 
-  // ▼▼▼【ここから修正】変更があったか比較するために、初期値を保持する変数を追加 ▼▼▼
+  // ▼▼▼【ここから修正】ロード中フラグを追加 ▼▼▼
+  bool _isLoading = true; // 初期状態はロード中
   String _initialNickname = '';
   String _initialUsername = '';
   String _initialBio = '';
@@ -47,23 +48,35 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _loadCurrentProfile() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    // 既に _isLoading = true で初期化しているのでここで再度セットする必要はないが、
+    // 再読み込みなどを考慮するなら setState(() { _isLoading = true; }); してもよい
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
 
-    final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-    if (mounted && doc.exists) {
-      final data = doc.data()!;
-      setState(() {
-        _nicknameController.text = data['nickname'] ?? '';
-        _usernameController.text = data['username'] ?? '';
-        _bioController.text = data['bio'] ?? '';
-        
-        _initialNickname = _nicknameController.text;
-        _initialUsername = _usernameController.text;
-        _initialBio = _bioController.text;
-        _currentProfileImageUrl = data['imageUrl'];
-        _currentHeaderImageUrl = data['headerImageUrl'];
-      });
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (mounted && doc.exists) {
+        final data = doc.data()!;
+        setState(() {
+          _nicknameController.text = data['nickname'] ?? '';
+          _usernameController.text = data['username'] ?? '';
+          _bioController.text = data['bio'] ?? '';
+          
+          _initialNickname = _nicknameController.text;
+          _initialUsername = _usernameController.text;
+          _initialBio = _bioController.text;
+          _currentProfileImageUrl = data['imageUrl'];
+          _currentHeaderImageUrl = data['headerImageUrl'];
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false; // ロード完了
+        });
+      }
     }
   }
 
@@ -101,15 +114,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       // プロフィール画像の変更をチェック
       if (_profileImageFile != null) {
         final ref = FirebaseStorage.instance.ref('user_images/${user.uid}/profile.jpg');
-        await ref.putFile(_profileImageFile!);
-        dataToUpdate['imageUrl'] = await ref.getDownloadURL();
+        await ref.putFile(_profileImageFile!, SettableMetadata(contentType: 'image/jpeg'));
+        final url = await ref.getDownloadURL();
+        final separator = url.contains('?') ? '&' : '?';
+        dataToUpdate['imageUrl'] = '$url${separator}v=${DateTime.now().millisecondsSinceEpoch}';
       }
 
       // ヘッダー画像の変更をチェック
       if (_headerImageFile != null) {
         final ref = FirebaseStorage.instance.ref('user_images/${user.uid}/header.jpg');
-        await ref.putFile(_headerImageFile!);
-        dataToUpdate['headerImageUrl'] = await ref.getDownloadURL();
+        await ref.putFile(_headerImageFile!, SettableMetadata(contentType: 'image/jpeg'));
+        final url = await ref.getDownloadURL();
+        final separator = url.contains('?') ? '&' : '?';
+        dataToUpdate['headerImageUrl'] = '$url${separator}v=${DateTime.now().millisecondsSinceEpoch}';
       }
 
       // 更新するデータが何か一つでもあれば、DBに書き込む
@@ -163,7 +180,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: _isLoading 
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
         child: Form(
           key: _formKey,
           child: Column(
